@@ -208,7 +208,7 @@ class Solution:
 def main():
     global problem, solution
     instance_file = 'data/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
-    output_file = instance_file.replace('.txt', '-solution.txt')
+    output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
     problem = InstanceVerolog2019(instance_file)
 
     # InstanceVerolog2019
