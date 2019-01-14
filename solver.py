@@ -208,7 +208,7 @@ class Solution:
 
 def main():
     global problem, solution
-    instance_file = 'data/STUDENT%003d.txt' % INSTANCE
+    instance_file = 'data/STUDENT%03d.txt' % INSTANCE
     output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
     problem = InstanceVerolog2019(instance_file)
 
@@ -246,7 +246,7 @@ def main():
 
     solution.calculate()
     solution.progress()
-    #solution.matches()
+    solution.matches()
 
     solution.writeSolution(output_file)
 
