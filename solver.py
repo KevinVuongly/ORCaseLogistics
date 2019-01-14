@@ -258,7 +258,7 @@ def main():
                 if problem.Requests[requestID - 1].shipped == False:
                     numberOfTrucks += 1
                     solution.Days[day - 1].TruckRoutes.append(solution.TruckRoute(numberOfTrucks))
-                    solution.Days[day - 1].TruckRoutes[-1].RequestIDs.append(requestID)
+                    solution.Days[day - 1].TruckRoutes[numberOfTrucks - 1].RequestIDs.append(requestID)
 
                     problem.Requests[requestID - 1].shipped = True
 
@@ -277,12 +277,12 @@ def main():
                             solution.distanceMadeTechnicians[technician - 1] +=  solution.Instance.calcDistance[requestID - 1][technician - 1]
                             problem.Requests[requestID - 1].installed = True
 
-                            # DOESNT WORK YET
                             if solution.TechnicianRoute(technician) not in solution.Days[day - 1].TechnicianRoutes:
                                 solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(technician))
 
+                            technicianIndex =
                             # DOESNT WORK YET
-                            solution.Days[day - 1].TechnicianRoutes[0].RequestIDs.append(requestID)
+                            solution.Days[day - 1].TechnicianRoutes[technicianIndex].RequestIDs.append(requestID)
                             break
 
                     if problem.Requests[requestID - 1].installed:
