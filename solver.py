@@ -73,10 +73,7 @@ class Solution:
             self.RequestDeliveryDays[request.ID] = 0
             self.RequestInstallmentDays[request.ID] = 0
 
-        self.distanceMadeTechnician = {}
-
-        for technician in self.Instance.Technicians:
-            self.distanceMadeTechnician[technician.ID] = 0
+        self.distanceMadeTechnicians = [[0 for days in range()] for numberOfTechnicians in range()]
 
     def writeSolution(self, filename):
         try:
