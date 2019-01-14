@@ -277,6 +277,7 @@ def main():
                             solution.distanceMadeTechnicians[technician - 1] +=  solution.Instance.calcDistance[requestID - 1][technician - 1]
                             problem.Requests[requestID - 1].installed = True
 
+                            # DOESNT WORK YET
                             if solution.TechnicianRoute(technician) not in solution.Days[day - 1].TechnicianRoutes:
                                 solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(technician))
 
