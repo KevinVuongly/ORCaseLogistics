@@ -25,7 +25,7 @@ INSTANCE = 2
 #         as late as possible, restrictions: technician days off, technician max day distance
 
 # step 3: assign request to delivery days, distribute as equally as possible
-# step 4: assign request to truck routes
+# step 4: assign request to truck routes.
 
 # step 5: calculate total costs
 
