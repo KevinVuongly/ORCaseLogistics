@@ -208,8 +208,8 @@ class Solution:
 
 def main():
     global problem, solution
-    instance_file = 'data/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
-    output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
+    instance_file = 'data/STUDENT%003d.txt' % INSTANCE
+    output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
     problem = InstanceVerolog2019(instance_file)
 
     # InstanceVerolog2019
@@ -230,6 +230,8 @@ def main():
     problem.calculateDistances()
 
     solution = Solution(problem)
+
+    """
     solution.Days[0].TruckRoutes.append(Solution.TruckRoute(1))
     solution.Days[0].TruckRoutes.append(Solution.TruckRoute(2))
     solution.Days[0].TruckRoutes[0].RequestIDs.append(7)
@@ -240,6 +242,7 @@ def main():
 #    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(7)
 #    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(9)
     solution.Days[2].TechnicianRoutes[0].RequestIDs.append(2)
+    """
 
     solution.calculate()
     solution.progress()
@@ -247,4 +250,5 @@ def main():
 
     solution.writeSolution(output_file)
 
-main()
+if __name__ == "__main__":
+    main()
