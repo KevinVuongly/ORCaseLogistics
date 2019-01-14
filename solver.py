@@ -16,6 +16,7 @@ INSTANCE = 2
 # Technician can only handle certain machines
 # Technicians need two days off after 5 days of working
 # Technicians need one day off after 4 days of working
+# Test
 
 # Sort requests with on top the ones that are least flexible (technicians)
 # Sort technicians with on top the ones that are least flexible
