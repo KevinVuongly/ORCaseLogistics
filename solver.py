@@ -73,6 +73,11 @@ class Solution:
             self.RequestDeliveryDays[request.ID] = 0
             self.RequestInstallmentDays[request.ID] = 0
 
+        self.distanceMadeTechnician = {}
+
+        for technician in self.Instance.Technicians:
+            self.distanceMadeTechnician[technician.ID] = 0
+
     def writeSolution(self, filename):
         try:
             file = open(filename, 'w')
@@ -181,7 +186,7 @@ class Solution:
             self.RequestMatches[request.ID] = []
             for technician in self.Instance.Technicians:
                 if technician.capabilities[request.machineID - 1]:
-                    if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
+                    if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] - <= technician.maxDayDistance:
                         self.RequestMatches[request.ID].append(technician)
                         self.TechnicianMatches[technician.ID].append(request)
 
