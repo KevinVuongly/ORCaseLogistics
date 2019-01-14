@@ -73,7 +73,7 @@ class Solution:
             self.RequestDeliveryDays[request.ID] = 0
             self.RequestInstallmentDays[request.ID] = 0
 
-        self.distanceMadeTechnicians = [[0 for days in range()] for maxTechnicians in range()]
+        self.distanceMadeTechnicians = [0 for maxTechnicians in range(len(self.Instance.Technicians))]
 
     def writeSolution(self, filename):
         try:
@@ -183,10 +183,12 @@ class Solution:
             self.RequestMatches[request.ID] = []
             for technician in self.Instance.Technicians:
                 if technician.capabilities[request.machineID - 1]:
-                    if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] - <= technician.maxDayDistance:
+                    if self.distanceMadeTechnicians[technician.ID - 1] + 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
+
                         self.RequestMatches[request.ID].append(technician)
                         self.TechnicianMatches[technician.ID].append(request)
 
+        """
         for request in self.Instance.Requests:
             print(request.ID, end = ' - ')
             for technician in self.RequestMatches[request.ID]:
@@ -198,7 +200,7 @@ class Solution:
             for request in self.TechnicianMatches[technician.ID]:
                 print(request.ID, end = ' ')
             print()
-
+        """
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
@@ -234,6 +236,70 @@ def main():
     solution = Solution(problem)
 
     """
+    Start of algorithm
+    """
+
+    numberOfTechnicians = len(solution.Instance.Technicians)
+
+    for day in range(1, solution.Instance.Days + 1):
+        # initialize amount of trucks used on the given day
+        numberOfTrucks = 0
+
+        """
+        Assign requests to trucks on given day
+        """
+        for requestID in range(1, len(solution.Instance.Requests) + 1):
+            fromDay = problem.Requests[requestID - 1].fromDay
+            toDay = problem.Requests[requestID - 1].toDay
+
+            # check if request is feasible to be shipped on the given day
+            if fromDay <= day <= toDay:
+                # check if request hasn't been shipped yet
+                if problem.Requests[requestID - 1].shipped == False:
+                    numberOfTrucks += 1
+                    solution.Days[day - 1].TruckRoutes.append(solution.TruckRoute(numberOfTrucks))
+                    solution.Days[day - 1].TruckRoutes[-1].RequestIDs.append(requestID)
+
+                    problem.Requests[requestID - 1].shipped = True
+
+        """
+        Assign technician for requests on given day
+        """
+
+        for requestID in range(1, len(solution.Instance.Requests) + 1):
+            if problem.Requests[requestID - 1].shipped and problem.Requests[requestID - 1].delivered and problem.Requests[requestID - 1].installed == False:
+                for technicianID in range(1, numberOfTechnicians + 1):
+                    solution.matches()
+
+                    for request in solution.TechnicianMatches[technicianID]:
+                        if request.ID == requestID:
+                            technician = technicianID
+                            solution.distanceMadeTechnicians[technician - 1] +=  solution.Instance.calcDistance[requestID - 1][technician - 1]
+                            problem.Requests[requestID - 1].installed = True
+
+                            if solution.TechnicianRoute(technician) not in solution.Days[day - 1].TechnicianRoutes:
+                                solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(technician))
+
+                            # DOESNT WORK YET
+                            solution.Days[day - 1].TechnicianRoutes[0].RequestIDs.append(requestID)
+                            break
+
+                    if problem.Requests[requestID - 1].installed:
+                        break
+
+
+
+        # set shipped requests to delivered for the following day
+        for requestID in range(1, len(solution.Instance.Requests) + 1):
+            if problem.Requests[requestID - 1].shipped == True:
+                problem.Requests[requestID - 1].delivered = True
+
+        # reset distance made of technicians for the new day
+        solution.distanceMadeTechnicians = [0 for maxTechnicians in range(numberOfTechnicians)]
+
+
+    solution.calculate()
+    """
     solution.Days[0].TruckRoutes.append(Solution.TruckRoute(1))
     solution.Days[0].TruckRoutes.append(Solution.TruckRoute(2))
     solution.Days[0].TruckRoutes[0].RequestIDs.append(7)
@@ -245,10 +311,6 @@ def main():
 #    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(9)
     solution.Days[2].TechnicianRoutes[0].RequestIDs.append(2)
     """
-
-    solution.calculate()
-    solution.progress()
-    solution.matches()
 
     solution.writeSolution(output_file)
 
