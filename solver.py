@@ -171,6 +171,7 @@ class Solution:
                        + self.IdleMachineCosts
 
     def matches(self):
+        test
         self.RequestMatches = {}
         self.TechnicianMatches = {}
 
@@ -196,6 +197,7 @@ class Solution:
             for request in self.TechnicianMatches[technician.ID]:
                 print(request.ID, end = ' ')
             print()
+
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
