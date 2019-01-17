@@ -1,9 +1,10 @@
 # Vehicle Routing
 
-from InstanceVerolog2019 import InstanceVerolog2019
+from InstanceCreator import InstanceCreator
 
-INSTANCE = 2
+INSTANCE = 3
 
+""" TO VALIDATE, USE python SolutionVerolog2019.py -i data/STUDENT002.txt –s solution/STUDENT002-solution.txt """
 # Restrictions
 
 # All requests must be delivered
@@ -74,6 +75,8 @@ class Solution:
             self.RequestInstallmentDays[request.ID] = 0
 
         self.distanceMadeTechnicians = [0 for maxTechnicians in range(len(self.Instance.Technicians))]
+        self.currentLocationTechnicians = [self.Instance.Technicians[Technician].locationID for Technician in range(len(self.Instance.Technicians))]
+        self.numberOfInstallationsTechnicians = [0 for maxTechnicians in range(len(self.Instance.Technicians))]
 
     def writeSolution(self, filename):
         try:
@@ -181,12 +184,15 @@ class Solution:
 
         for request in self.Instance.Requests:
             self.RequestMatches[request.ID] = []
-            for technician in self.Instance.Technicians:
-                if technician.capabilities[request.machineID - 1]:
-                    if self.distanceMadeTechnicians[technician.ID - 1] + 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
 
-                        self.RequestMatches[request.ID].append(technician)
-                        self.TechnicianMatches[technician.ID].append(request)
+            for technician in self.Instance.Technicians:
+                if technician.forcedBreak == 0:
+                    if technician.capabilities[request.machineID - 1]:
+                            currentLocationTechnician = self.currentLocationTechnicians[technician.ID - 1]
+                            if self.numberOfInstallationsTechnicians[technician.ID - 1] < technician.maxNrInstallations and self.distanceMadeTechnicians[technician.ID - 1] + self.Instance.calcDistance[currentLocationTechnician - 1][request.customerLocID - 1] + self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
+
+                                self.RequestMatches[request.ID].append(technician)
+                                self.TechnicianMatches[technician.ID].append(request)
 
         """
         for request in self.Instance.Requests:
@@ -214,7 +220,7 @@ def main():
     global problem, solution
     instance_file = 'data/STUDENT%03d.txt' % INSTANCE
     output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
-    problem = InstanceVerolog2019(instance_file)
+    problem = InstanceCreator(instance_file)
 
     # InstanceVerolog2019
     #  Dataset, Name
@@ -244,6 +250,8 @@ def main():
     for day in range(1, solution.Instance.Days + 1):
         # initialize amount of trucks used on the given day
         numberOfTrucks = 0
+        #initialize dict of working technicians on given day
+        workingTechnicians = {}
 
         """
         Assign requests to trucks on given day
@@ -265,54 +273,71 @@ def main():
         """
         Assign technician for requests on given day
         """
+        # remember for all technicians if they have worked yesterday
+        for technician in solution.Instance.Technicians:
+            if technician.workedToday == True:
+                technician.workedYesterday = True
+                technician.workedToday = False
+            else:
+                technician.workedYesterday = False
+                technician.consecutiveDays = 0
 
         for requestID in range(1, len(solution.Instance.Requests) + 1):
             if problem.Requests[requestID - 1].shipped and problem.Requests[requestID - 1].delivered and problem.Requests[requestID - 1].installed == False:
-                for technicianID in range(1, numberOfTechnicians + 1):
+                for technician in solution.Instance.Technicians:
                     solution.matches()
-
-                    for request in solution.TechnicianMatches[technicianID]:
+                    for request in solution.TechnicianMatches[technician.ID]:
+                        # technician installs request
                         if request.ID == requestID:
-                            technician = technicianID
-                            solution.distanceMadeTechnicians[technician - 1] +=  solution.Instance.calcDistance[requestID - 1][technician - 1]
+                            if technician.workedToday == False:
+                                technician.workedToday = True
+                                technician.consecutiveDays += 1
+
+                            solution.distanceMadeTechnicians[technician.ID - 1] += solution.Instance.calcDistance[solution.currentLocationTechnicians[technician.ID - 1] - 1][request.customerLocID - 1]
+                            solution.currentLocationTechnicians[technician.ID - 1] = problem.Requests[requestID - 1].customerLocID
+                            solution.numberOfInstallationsTechnicians[technician.ID - 1] += 1
                             problem.Requests[requestID - 1].installed = True
+                            if technician.ID not in workingTechnicians:
+                                workingTechnicians[technician.ID] = [requestID]
+                            else:
+                                workingTechnicians[technician.ID].append(requestID)
 
-                            if solution.TechnicianRoute(technician) not in solution.Days[day - 1].TechnicianRoutes:
-                                solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(technician))
-
-                            technicianIndex =
-                            # DOESNT WORK YET
-                            solution.Days[day - 1].TechnicianRoutes[technicianIndex].RequestIDs.append(requestID)
                             break
 
                     if problem.Requests[requestID - 1].installed:
                         break
 
+        # head home
+        for technician in solution.Instance.Technicians:
+            solution.distanceMadeTechnicians[technician.ID - 1] +=  solution.Instance.calcDistance[solution.currentLocationTechnicians[technician.ID - 1] - 1][technician.locationID - 1]
 
+        # add routes of working technicians to the given day
+        for key, value in sorted(workingTechnicians.items()):
+            solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(key))
+            for request in value:
+                solution.Days[day - 1].TechnicianRoutes[-1].RequestIDs.append(request)
 
         # set shipped requests to delivered for the following day
         for requestID in range(1, len(solution.Instance.Requests) + 1):
             if problem.Requests[requestID - 1].shipped == True:
                 problem.Requests[requestID - 1].delivered = True
 
+        # force technician a break of 2 days if they have worked for 5 consecutive days
+        for technician in solution.Instance.Technicians:
+            if technician.forcedBreak > 0:
+                technician.forcedBreak -= 1
+
+            if technician.consecutiveDays == 5:
+                technician.forcedBreak = 2
+                technician.consecutiveDays = 0
+
+
         # reset distance made of technicians for the new day
         solution.distanceMadeTechnicians = [0 for maxTechnicians in range(numberOfTechnicians)]
-
+        solution.currentLocationTechnicians = [solution.Instance.Technicians[TechnicianID].locationID for TechnicianID in range(len(solution.Instance.Technicians))]
+        solution.numberOfInstallationsTechnicians = [0 for maxTechnicians in range(numberOfTechnicians)]
 
     solution.calculate()
-    """
-    solution.Days[0].TruckRoutes.append(Solution.TruckRoute(1))
-    solution.Days[0].TruckRoutes.append(Solution.TruckRoute(2))
-    solution.Days[0].TruckRoutes[0].RequestIDs.append(7)
-    solution.Days[0].TruckRoutes[0].RequestIDs.append(2)
-#    solution.Days[0].TruckRoutes[0].RequestIDs.append(9)
-    solution.Days[0].TruckRoutes[1].RequestIDs.append(12)
-    solution.Days[2].TechnicianRoutes.append(Solution.TechnicianRoute(2))
-#    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(7)
-#    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(9)
-    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(2)
-    """
-
     solution.writeSolution(output_file)
 
 if __name__ == "__main__":
