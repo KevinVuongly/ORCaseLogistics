@@ -3,42 +3,12 @@
 from InstanceVerolog2019 import InstanceVerolog2019
 
 INSTANCE = 2
-
-# Restrictions
-
-# All requests must be delivered
-# All requests must be installed
-# Each installment has to be after delivery
-# Max capacity of truck may not be exceeded
-# Max distance of truck may not be exceeded
-# Max distance for each technician
-# Max number of installments for each technician
-# Technician can only handle certain machines
-# Technicians need two days off after 5 days of working
-# Technicians need one day off after 4 days of working
-
-# Sort requests with on top the ones that are least flexible (technicians)
-# Sort technicians with on top the ones that are least flexible
-
-# Step 1: assign requests to technicians, distribute equally (switching if needed)
-# Step 2: assign days to requests, start with the ones that are least flexible (time window)
-#         as late as possible, restrictions: technician days off, technician max day distance
-
-# step 3: assign request to delivery days, distribute as equally as possible
-# step 4: assign request to truck routes
-
-# step 5: calculate total costs
-
-# improve
-
-# subproblem is Travelers Salesmen Problem
-
-
 class Solution:
     class TruckRoute:
         def __init__(self, ID):
             self.TruckID = ID
-            self.RequestIDs = []
+            self.RequestIDs = [] 
+            
 
         def __repr__(self):
             return '%d %s' % (self.TruckID, ' '.join(map(str, self.RequestIDs)))
@@ -46,35 +16,37 @@ class Solution:
     class TechnicianRoute:
         def __init__(self, ID):
             self.TechnicianID = ID
-            self.RequestIDs = []
+            self.RequestIDs = [] 
+            ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
+            self.DistanceTravelled = 0 # De afstand die is afgelegd tot de laatste request, in volgorde van de requests (dus nog niet geoptimaliseerd)
 
         def __repr__(self):
             return '%d %s' % (self.TechnicianID, ' '.join(map(str, self.RequestIDs)))
-
-    class Day:
+     
+    class Day:    
         def __init__(self, dayNumber):
             self.DayNumber = dayNumber
             self.NumberOfTrucks = 0
             self.TruckRoutes = []
             self.NumberOfTechnicians = 0
-            self.TechnicianRoutes = []
-
+            self.TechnicianRoutes = []     
+            ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
+            self.TechniciansWorking = [] # Dit houdt bij welke technicians al zijn ingedeeld op die dag
+        
     def __init__(self, instance):
         self.Instance = instance
-
+        
         self.Days = []
         for i in range(self.Instance.Days):
             self.Days.append(self.Day(i + 1))
-
+        
         self.RequestDeliveryDays = {}
         self.RequestInstallmentDays = {}
-
+        
         for request in self.Instance.Requests:
             self.RequestDeliveryDays[request.ID] = 0
             self.RequestInstallmentDays[request.ID] = 0
-
-        self.distanceMadeTechnicians = [0 for maxTechnicians in range(len(self.Instance.Technicians))]
-
+                
     def writeSolution(self, filename):
         try:
             file = open(filename, 'w')
@@ -89,7 +61,7 @@ class Solution:
             file.write('NUMBER_OF_TECHNICIANS_USED = %d\n' % self.NumberOfTechniciansUsed)
             file.write('IDLE_MACHINE_COSTS = %d\n' % self.IdleMachineCosts)
             file.write('TOTAL_COST = %d\n' % self.TotalCost)
-
+            
             numbers = range(1, len(self.Days) + 1)
             for i, day in zip(numbers, self.Days):
                 file.write('\n')
@@ -100,8 +72,8 @@ class Solution:
                 file.write('NUMBER_OF_TECHNICIANS = %d\n' % len(day.TechnicianRoutes))
                 for route in day.TechnicianRoutes:
                     file.write('%s\n' % route)
-
-
+                
+            
         except IOError:
             print('Error opening %s' %filename)
 
@@ -110,22 +82,22 @@ class Solution:
             if ID == machine.ID:
                 return machine
         return False
-
+    
     def getRequest(self, ID):
         for request in self.Instance.Requests:
             if ID == request.ID:
                 return request
         return False
-
+        
     def calculate(self):
         self.TruckDistance = 0
         self.NumberOfTruckDays = 0
         self.NumberOfTrucksUsed = 0
         self.NumberOfTechnicianDays = 0
-
+        
         self.TechnicianDistance = 0
         self.TechniciansUsed = set()
-
+        
         for day in self.Days:
             day.numberOfTrucks = len(day.TruckRoutes)
             self.NumberOfTruckDays += day.numberOfTrucks
@@ -153,7 +125,7 @@ class Solution:
                     destination = self.getRequest(requestID).customerLocID
                     self.TechnicianDistance += self.Instance.calcDistance[start - 1][destination - 1]
                     start = destination
-
+                    
         self.NumberOfTechniciansUsed = len(self.TechniciansUsed)
 
         self.IdleMachineCosts = 0
@@ -163,7 +135,7 @@ class Solution:
                 idleTime = self.RequestInstallmentDays[request.ID] - self.RequestDeliveryDays[request.ID] - 1
                 idlePenalty = self.getMachine(machineID).idlePenalty
                 self.IdleMachineCosts += idleTime * idlePenalty
-
+        
         self.TotalCost = self.Instance.TruckDistanceCost * self.TruckDistance \
                        + self.Instance.TruckDayCost * self.NumberOfTruckDays \
                        + self.Instance.TruckCost * self.NumberOfTrucksUsed \
@@ -175,7 +147,9 @@ class Solution:
     def matches(self):
         self.RequestMatches = {}
         self.TechnicianMatches = {}
-
+        self.number_matches = [] # list die aantal technicians geeft die matchen
+        
+        
         for technician in self.Instance.Technicians:
             self.TechnicianMatches[technician.ID] = []
 
@@ -183,23 +157,37 @@ class Solution:
             self.RequestMatches[request.ID] = []
             for technician in self.Instance.Technicians:
                 if technician.capabilities[request.machineID - 1]:
-                    if self.distanceMadeTechnicians[technician.ID - 1] + 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
-
+                    if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
                         self.RequestMatches[request.ID].append(technician)
                         self.TechnicianMatches[technician.ID].append(request)
-
-        """
+        
+        ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
         for request in self.Instance.Requests:
+            self.number_matches.append(len(self.RequestMatches[request.ID]))
+            '''
             print(request.ID, end = ' - ')
             for technician in self.RequestMatches[request.ID]:
                 print(technician.ID, end = ' ')
             print()
+            '''
+
+        
+        ''' requests op volgorde zetten: de requests die door de meeste technicians kunnen worden geinstalleerd als laatste'''
+        pairs = zip(self.number_matches,self.Instance.Requests)
+        sorted_pairs = sorted(pairs, key=lambda pair: pair[0]) #sorteren op basis van aantal technicians die job kunnen doen
+        
+        self.sorted_requests = [x for y, x in sorted_pairs]
+
+        '''       
         for technician in self.Instance.Technicians:
             print(technician.ID, end = ' - ')
             for request in self.TechnicianMatches[technician.ID]:
                 print(request.ID, end = ' ')
             print()
-        """
+        '''
+
+        
+    
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
@@ -208,111 +196,131 @@ class Solution:
             if self.RequestInstallmentDays[request.ID] > self.RequestDeliveryDays[request.ID] and self.RequestDeliveryDays[request.ID] > 0:
                 idleTime = self.RequestInstallmentDays[request.ID] - self.RequestDeliveryDays[request.ID] - 1
             print('%6d  %8d  %11d  %9d' % (request.ID, self.RequestDeliveryDays[request.ID], self.RequestInstallmentDays[request.ID], idleTime))
+    
+    
+    def assign_trucks(self): # assigns een truck voor iedere opdracht, voor iedere opdracht een nieuwe. Meteen als de opdracht available is bezorgen
+        for request in self.Instance.Requests:
+            day = request.fromDay 
+            c = len(self.Days[day-1].TruckRoutes) # zodat elke dag trucks worden genummerd als 1,2,...
+            self.Days[day-1].TruckRoutes.append(self.TruckRoute(c+1)) #voor iedere request, een nieuwe truck. Truck wordt toegevoegd op dag day-1
+            self.Days[day-1].TruckRoutes[-1].RequestIDs.append(request.ID) # Voeg request id toe aan laatste truckroute in de list
+            
+    def assign_technicians(self):
+        uninstalled_requests = self.sorted_requests[:] # of gebruik self.Instance.Requests[:], niet op volgorde
 
+        for day in range(1,self.Instance.Days+1):
+
+            for request in uninstalled_requests[:]:
+                feasible_technicians = []    
+   
+                if day>request.fromDay :
+
+                    for technician in self.Instance.Technicians:
+                        if technician.capabilities[request.machineID - 1]:
+                            if technician.ID not in self.Days[day-1].TechniciansWorking:  #technician werkt deze dag nog niet
+                                if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
+                                    feasible_technicians.append(technician)
+
+                            else:
+                                i = self.Days[day-1].TechniciansWorking.index(technician.ID) #als technician al gebruikt is, vindt dit de index van deze technician
+                                if len(self.Days[day-1].TechnicianRoutes[i].RequestIDs) < technician.maxNrInstallations:
+                                    
+                                    a = self.getRequest(self.Days[day-1].TechnicianRoutes[i].RequestIDs[-1]).customerLocID-1 # tot nu toe laatste request voor technician op deze dag
+                                    b = request.customerLocID - 1 # locatie van huidige request
+                        
+                                    if self.Days[day-1].TechnicianRoutes[i].DistanceTravelled + self.Instance.calcDistance[a][b] + self.Instance.calcDistance[b][technician.locationID - 1]<= technician.maxDayDistance:  
+                                        feasible_technicians.append(technician) #distance travelled is de afstand tot de tot nu toe laatste request. 
+                    
+                    for technician in feasible_technicians[:]:
+                        
+                        # Heuristic: geef een technician vrij na 4 dagen, dan hoeft deze maar een dag vrij
+                        if technician.ID in self.Days[day-2].TechniciansWorking:
+                            if technician.ID in self.Days[day-3].TechniciansWorking:
+                                if technician.ID in self.Days[day-4].TechniciansWorking:
+                                    if technician.ID in self.Days[day-5].TechniciansWorking:
+                                            feasible_technicians.remove(technician) #[f for f in  feasible_technicians if f!= technician]
+                                                
+                         
+                    if  feasible_technicians:   #check if list is not  empty
+                        #Heuristic: vind de technician waar zijn laatste stop het dichtste bij de huidige request is
+                        
+                        distances_to_request = [] # een list die de afstanden geeft van alle feasible technicians (vanaf hun laatste request) naar de huidige request
+                        for feasible_technician in feasible_technicians:
+                            if feasible_technician.ID not in self.Days[day-1].TechniciansWorking: #technician was nog niet aan het werk: voeg afstand van thuislocatie naar request locatie toe
+                                distances_to_request.append(self.Instance.calcDistance[feasible_technician.locationID-1][request.customerLocID - 1])
+                            else:
+                                i = self.Days[day-1].TechniciansWorking.index(feasible_technician.ID) #als technician al gebruikt is, vindt dit de index van deze technician
+                                for route in self.Days[day-1].TechnicianRoutes:
+                                    if route.TechnicianID == feasible_technician.ID:
+                                        last_request = self.getRequest(route.RequestIDs[-1]).customerLocID-1 #location of last request
+                                        distances_to_request.append(self.Instance.calcDistance[last_request][request.customerLocID - 1])
+                                        
+                                        
+                        pairs = zip(distances_to_request,feasible_technicians)
+                        sorted_pairs = sorted(pairs, key=lambda pair: pair[0])    #sorteert de paren op basis van afstand tot request     
+                        sorted_technicians = [x for y, x in sorted_pairs] # technician dichtste bij staat boven
+                        
+                        closest_technician = sorted_technicians[0]
+                        
+                        if closest_technician.ID  not in self.Days[day-1].TechniciansWorking:
+                            self.Days[day-1].TechnicianRoutes.append(self.TechnicianRoute(closest_technician.ID)) #Assigns eerste feasible technician aan de job
+                            
+                            self.Days[day-1].TechnicianRoutes[-1].RequestIDs.append(request.ID)
+                            self.Days[day-1].TechniciansWorking.append(closest_technician.ID)   
+                            self.Days[day-1].TechnicianRoutes[-1].DistanceTravelled += self.Instance.calcDistance[closest_technician.locationID - 1 ][request.customerLocID - 1] 
+                            
+                            
+                        else:
+                            i = self.Days[day-1].TechniciansWorking.index(closest_technician.ID) #als technician al gebruikt is, vindt dit de index van deze technician
+                            for route in self.Days[day-1].TechnicianRoutes:
+                                if route.TechnicianID == closest_technician.ID:
+                                    a = self.getRequest(route.RequestIDs[-1]).customerLocID-1
+                                    route.RequestIDs.append(request.ID)
+                                    b = request.customerLocID - 1
+                                    route.DistanceTravelled += self.Instance.calcDistance[a][b] #+ self.Instance.calcDistance[b][closest_technician.locationID-1] #checken
+                    
+                        uninstalled_requests.remove(request)                            
+
+        print("Uninstalled Requests:", [u.ID for u in uninstalled_requests])
+  
+    
+        
 def main():
     global problem, solution
-    instance_file = 'data/STUDENT%03d.txt' % INSTANCE
-    output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
-    problem = InstanceVerolog2019(instance_file)
+    #instance_file = 'VSC2019_ORTEC_early_%02d.txt' % INSTANCE
+    instance_file = 'STUDENT%03d.txt' % INSTANCE
 
+    output_file = instance_file.replace('.txt', '-solution.txt')
+    
+    problem = InstanceVerolog2019(instance_file)
+    
     # InstanceVerolog2019
     #  Dataset, Name
     #  Days, TruckCapacity, TruckMaxDistance
     #  TruckDistanceCost, TruckDayCost, TruckCost, TechnicianDistanceCost, TechnicianDayCost, TechnicianCost
-
+   
     # Machines, Requests, Locations, Technicians
-
+                
     # Machine    - ID, size, idlePenalty
     # Request    - ID, customerLocID, fromDay, toDay, machineID, amount
     # Location   - ID, X, Y
     # Technician - ID, locationID, maxDayDistance, maxNrInstallation, capabilities
-
+    
     # ReadDistance
     # calcDistance
-
+    
     problem.calculateDistances()
-
+    
     solution = Solution(problem)
+    
+    #solution.progress()
+    solution.matches()
 
-    """
-    Start of algorithm
-    """
-
-    numberOfTechnicians = len(solution.Instance.Technicians)
-
-    for day in range(1, solution.Instance.Days + 1):
-        # initialize amount of trucks used on the given day
-        numberOfTrucks = 0
-
-        """
-        Assign requests to trucks on given day
-        """
-        for requestID in range(1, len(solution.Instance.Requests) + 1):
-            fromDay = problem.Requests[requestID - 1].fromDay
-            toDay = problem.Requests[requestID - 1].toDay
-
-            # check if request is feasible to be shipped on the given day
-            if fromDay <= day <= toDay:
-                # check if request hasn't been shipped yet
-                if problem.Requests[requestID - 1].shipped == False:
-                    numberOfTrucks += 1
-                    solution.Days[day - 1].TruckRoutes.append(solution.TruckRoute(numberOfTrucks))
-                    solution.Days[day - 1].TruckRoutes[numberOfTrucks - 1].RequestIDs.append(requestID)
-
-                    problem.Requests[requestID - 1].shipped = True
-
-        """
-        Assign technician for requests on given day
-        """
-
-        for requestID in range(1, len(solution.Instance.Requests) + 1):
-            if problem.Requests[requestID - 1].shipped and problem.Requests[requestID - 1].delivered and problem.Requests[requestID - 1].installed == False:
-                for technicianID in range(1, numberOfTechnicians + 1):
-                    solution.matches()
-
-                    for request in solution.TechnicianMatches[technicianID]:
-                        if request.ID == requestID:
-                            technician = technicianID
-                            solution.distanceMadeTechnicians[technician - 1] +=  solution.Instance.calcDistance[requestID - 1][technician - 1]
-                            problem.Requests[requestID - 1].installed = True
-
-                            if solution.TechnicianRoute(technician) not in solution.Days[day - 1].TechnicianRoutes:
-                                solution.Days[day - 1].TechnicianRoutes.append(solution.TechnicianRoute(technician))
-
-                            technicianIndex =
-                            # DOESNT WORK YET
-                            solution.Days[day - 1].TechnicianRoutes[technicianIndex].RequestIDs.append(requestID)
-                            break
-
-                    if problem.Requests[requestID - 1].installed:
-                        break
-
-
-
-        # set shipped requests to delivered for the following day
-        for requestID in range(1, len(solution.Instance.Requests) + 1):
-            if problem.Requests[requestID - 1].shipped == True:
-                problem.Requests[requestID - 1].delivered = True
-
-        # reset distance made of technicians for the new day
-        solution.distanceMadeTechnicians = [0 for maxTechnicians in range(numberOfTechnicians)]
-
+    solution.assign_trucks()
+    solution.assign_technicians()    
 
     solution.calculate()
-    """
-    solution.Days[0].TruckRoutes.append(Solution.TruckRoute(1))
-    solution.Days[0].TruckRoutes.append(Solution.TruckRoute(2))
-    solution.Days[0].TruckRoutes[0].RequestIDs.append(7)
-    solution.Days[0].TruckRoutes[0].RequestIDs.append(2)
-#    solution.Days[0].TruckRoutes[0].RequestIDs.append(9)
-    solution.Days[0].TruckRoutes[1].RequestIDs.append(12)
-    solution.Days[2].TechnicianRoutes.append(Solution.TechnicianRoute(2))
-#    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(7)
-#    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(9)
-    solution.Days[2].TechnicianRoutes[0].RequestIDs.append(2)
-    """
-
     solution.writeSolution(output_file)
+        
 
-if __name__ == "__main__":
-    main()
+main()
