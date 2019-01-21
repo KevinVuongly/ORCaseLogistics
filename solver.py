@@ -283,8 +283,6 @@ class Solution:
                             if self.Instance.Requests[request.ID - 1].shipped:
                                 break
 
-                    self.RequestDeliveryDays[request.ID] = day
-
     def assignTechnicians(self, day):
         """
         Assign requests to technicians on given day
@@ -318,7 +316,6 @@ class Solution:
                             self.currentLocationTechnicians[day - 1][technician.ID - 1] = request.customerLocID
                             self.numberOfInstallationsTechnicians[day - 1][technician.ID - 1] += 1
                             problem.Requests[request.ID - 1].installed = True
-                            self.RequestInstallmentDays[request.ID] = day
                             if technician.ID not in workingTechnicians:
                                 workingTechnicians[technician.ID] = [request.ID]
                             else:
