@@ -1,8 +1,7 @@
 # Vehicle Routing
 
 from InstanceCreator import InstanceCreator
-
-INSTANCE = 2
+from queue import PriorityQueue
 
 """ TO VALIDATE, USE python SolutionVerolog2019.py -i data/STUDENT002.txt –s solution/STUDENT002-solution.txt """
 # Restrictions
@@ -72,6 +71,8 @@ class Solution:
         for request in self.Instance.Requests:
             self.RequestDeliveryDays[request.ID] = 0
             self.RequestInstallmentDays[request.ID] = 0
+
+        self.depot = 1
 
         self.numberOfTrucks = [0 for days in range(self.Instance.Days)]
         self.capacityUsedTrucks = [[] for days in range(self.Instance.Days)]
@@ -184,32 +185,25 @@ class Solution:
                        + self.Instance.TechnicianCost * self.NumberOfTechniciansUsed \
                        + self.IdleMachineCosts
 
-    def matchesTrucks(self, day, currentRequest):
-        depot = 1
-        self.TruckMatches = {}
-        noMatches = 0
-        requestIncluded = False
+    def matchesTrucks(self, day):
+        self.shortestPath = PriorityQueue()
 
-        if self.numberOfTrucks[day - 1] > 0:
-            for truck in self.Days[day - 1].TruckRoutes:
-                self.TruckMatches[truck.TruckID] = []
+        for request in self.Instance.Requests:
+            if request.shipped == False and request.fromDay <= day <= request.toDay:
+                for truck in self.Days[day - 1].TruckRoutes:
+                    currentLocationTruck = self.currentLocationTrucks[day - 1][truck.TruckID - 1]
 
-            for request in self.Instance.Requests:
-                if request.shipped == False and request.fromDay <= day <= request.toDay:
-                    for truck in self.Days[day - 1].TruckRoutes:
-                        currentLocationTruck = self.currentLocationTrucks[day - 1][truck.TruckID - 1]
+                    if self.distanceMadeTrucks[day - 1][truck.TruckID - 1] + \
+                    self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1] + \
+                    self.Instance.calcDistance[request.customerLocID - 1][self.depot - 1] <= self.Instance.TruckMaxDistance \
+                    and self.capacityUsedTrucks[day - 1][truck.TruckID - 1] + request.amount * self.getMachine(request.machineID).size \
+                    <= self.Instance.TruckCapacity:
 
-                        if self.distanceMadeTrucks[day - 1][truck.TruckID - 1] + \
-                        self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1] + \
-                        self.Instance.calcDistance[request.customerLocID - 1][depot - 1] <= self.Instance.TruckMaxDistance \
-                        and self.capacityUsedTrucks[day - 1][truck.TruckID - 1] + request.amount * self.getMachine(request.machineID).size \
-                        <= self.Instance.TruckCapacity:
+                        distance = self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1]
+                        volume = request.amount * self.getMachine(request.machineID).size
+                        self.shortestPath.put((distance - volume + request.ID, [distance, volume, truck.TruckID, request]))
 
-                                self.TruckMatches[truck.TruckID].append(request)
-                                if currentRequest == request.ID:
-                                    requestIncluded = True
-
-        if requestIncluded == False:
+        if self.shortestPath.empty():
             return False
         else:
             return True
@@ -238,50 +232,77 @@ class Solution:
                             self.RequestMatches[request.ID].append(technician)
                             self.TechnicianMatches[technician.ID].append(request)
 
-    def assignTrucks(self, day):
+    def assignTrucks(self, day, maxTrucks):
         """
         Assign requests to trucks on given day
         """
+
+        # assign request to very first truck
+        noTrucksQueue = PriorityQueue()
+
         for request in self.Instance.Requests:
+            if request.fromDay <= day <= request.toDay:
+                if request.shipped == False:
 
-            locationRequest = request.customerLocID
-            fromDay = request.fromDay
-            toDay = request.toDay
+                    dist= int(self.Instance.calcDistance[self.depot - 1][request.customerLocID - 1])
+                    vol = request.amount * self.getMachine(request.machineID).size
+                    noTrucksQueue.put((dist - vol + request.ID,[dist, vol, request]))
 
-            # check if request is feasible to be shipped on the given day
-            if fromDay <= day <= toDay:
-                # check if request hasn't been shipped yet, if shipped do nothing
-                if self.Instance.Requests[request.ID - 1].shipped == False:
-                    if self.numberOfTrucks[day - 1] == 0:
-                        matches = False
-                    else:
-                        matches = self.matchesTrucks(day, request.ID)
+        requestToDo = noTrucksQueue.qsize()
 
-                    # if no trucks used yet or all trucks can't handle more requests
-                    if matches == False:
-                        self.numberOfTrucks[day - 1] += 1
-                        truckID = self.numberOfTrucks[day - 1]
-                        self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
-                        self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
+        if requestToDo > 0:
+            [score, [distance, volume, request]] = list(noTrucksQueue.get())
+            self.numberOfTrucks[day - 1] += 1
+            truckID = self.numberOfTrucks[day - 1]
+            self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
+            self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
 
-                        self.capacityUsedTrucks[day - 1].append(request.amount * self.getMachine(request.machineID).size)
-                        self.currentLocationTrucks[day - 1].append(locationRequest)
-                        self.distanceMadeTrucks[day - 1].append(self.Instance.calcDistance[self.currentLocationTrucks[day - 1][truckID - 1] - 1][locationRequest - 1])
+            self.capacityUsedTrucks[day - 1].append(volume)
+            self.distanceMadeTrucks[day - 1].append(distance)
+            self.currentLocationTrucks[day - 1].append(request.customerLocID)
 
-                        self.Instance.Requests[request.ID - 1].shipped = True
-                    else:
-                        for truck in self.Days[day - 1].TruckRoutes:
-                            for requestMatch in self.TruckMatches[truck.TruckID]:
-                                if requestMatch.ID == request.ID:
-                                    self.Days[day - 1].TruckRoutes[truck.TruckID - 1].RequestIDs.append(request.ID)
+            request.shipped = True
+            requestToDo -= 1
 
-                                    self.capacityUsedTrucks[day - 1][truck.TruckID - 1] += request.amount * self.getMachine(request.machineID).size
-                                    self.currentLocationTrucks[day - 1][truck.TruckID - 1] = locationRequest
-                                    self.distanceMadeTrucks[day - 1][truck.TruckID - 1] += self.Instance.calcDistance[self.currentLocationTrucks[day - 1][truck.TruckID - 1] - 1][locationRequest - 1]
+        toNextDay = False
+        while requestToDo > 0 and toNextDay == False:
 
-                                    self.Instance.Requests[request.ID - 1].shipped = True
-                            if self.Instance.Requests[request.ID - 1].shipped:
-                                break
+            matches = self.matchesTrucks(day)
+
+            # assign request to an existing truck
+            if matches:
+
+                [score, [distance, volume, truckID, request]] = list(self.shortestPath.get())
+
+                self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
+
+                self.capacityUsedTrucks[day - 1][truckID - 1] += volume
+                self.distanceMadeTrucks[day - 1][truckID - 1] += distance
+                self.currentLocationTrucks[day - 1][truckID - 1] = request.customerLocID
+
+                request.shipped = True
+                requestToDo -= 1
+
+            # assign request to a new truck if possible e.g. less than maximum number of trucks given
+            else:
+                if self.numberOfTrucks[day - 1] < maxTrucks:
+
+                    while request.shipped == True:
+                        [score, [distance, volume, request]] = list(noTrucksQueue.get())
+
+                    self.numberOfTrucks[day - 1] += 1
+                    truckID = self.numberOfTrucks[day - 1]
+                    self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
+                    self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
+
+                    self.capacityUsedTrucks[day - 1].append(volume)
+                    self.distanceMadeTrucks[day - 1].append(distance)
+                    self.currentLocationTrucks[day - 1].append(request.customerLocID)
+
+                    request.shipped = True
+                    requestToDo -= 1
+                else:
+                    toNextDay = True
 
     def assignTechnicians(self, day):
         """
@@ -360,8 +381,13 @@ class Solution:
 
 def main():
     global problem, solution
-    instance_file = 'data/STUDENT%03d.txt' % INSTANCE
-    output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
+    if official == "Y":
+        instance_file = 'data/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
+        output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
+    else:
+        instance_file = 'data/STUDENT%03d.txt' % INSTANCE
+        output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
+
     problem = InstanceCreator(instance_file)
 
     # InstanceVerolog2019
@@ -385,15 +411,29 @@ def main():
     """
     Start of algorithm
     """
+    maxTrucks = 1
+    feasible = False
 
-    for day in range(1, solution.Instance.Days + 1):
-        solution.assignTrucks(day)
-        solution.assignTechnicians(day)
+    while feasible == False:
+        installedRequests = 0
+        for day in range(1, solution.Instance.Days + 1):
+            solution.assignTrucks(day, maxTrucks)
+            solution.assignTechnicians(day)
+
+        for request in solution.Instance.Requests:
+            if request.installed == False:
+                maxTrucks += 1
+                break
+            else:
+                installedRequests += 1
+
+        if installedRequests == len(solution.Instance.Requests):
+            feasible = True
 
     solution.calculate()
     solution.writeSolution(output_file)
 
 if __name__ == "__main__":
-    for i in range(2,11):
-        INSTANCE = i
-        main()
+    INSTANCE = int(input("which instance? "))
+    official = input("Official data?(Y/N) ")
+    main()
