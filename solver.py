@@ -264,8 +264,7 @@ class Solution:
             request.shipped = True
             requestToDo -= 1
 
-        toNextDay = False
-        while requestToDo > 0 and toNextDay == False:
+        while requestToDo > 0:
 
             matches = self.matchesTrucks(day)
 
@@ -302,7 +301,7 @@ class Solution:
                     request.shipped = True
                     requestToDo -= 1
                 else:
-                    toNextDay = True
+                    break
 
     def assignTechnicians(self, day):
         """
@@ -313,7 +312,7 @@ class Solution:
 
         # remember for all technicians if they have worked yesterday
         for technician in self.Instance.Technicians:
-            if technician.workedToday == True:
+            if technician.workedToday:
                 technician.workedYesterday = True
                 technician.workedToday = False
             else:
@@ -388,8 +387,6 @@ def main():
         instance_file = 'data/STUDENT%03d.txt' % INSTANCE
         output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
 
-    problem = InstanceCreator(instance_file)
-
     # InstanceVerolog2019
     #  Dataset, Name
     #  Days, TruckCapacity, TruckMaxDistance
@@ -405,9 +402,6 @@ def main():
     # ReadDistance
     # calcDistance
 
-    problem.calculateDistances()
-    solution = Solution(problem)
-
     """
     Start of algorithm
     """
@@ -416,6 +410,11 @@ def main():
 
     while feasible == False:
         installedRequests = 0
+
+        problem = InstanceCreator(instance_file)
+        problem.calculateDistances()
+        solution = Solution(problem)
+
         for day in range(1, solution.Instance.Days + 1):
             solution.assignTrucks(day, maxTrucks)
             solution.assignTechnicians(day)
