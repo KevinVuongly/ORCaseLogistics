@@ -66,6 +66,7 @@ class InstanceCreator(base.BaseParser):
             self.maxDayDistance = maxDayDistance
             self.maxNrInstallations = maxNrInstallations
             self.capabilities = capabilities
+            self.used = False
             self.workedYesterday = False
             self.workedToday = False
             self.consecutiveDays = 0
