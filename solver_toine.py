@@ -1,5 +1,8 @@
 # Vehicle Routing
 
+
+''' Toegestaan om TSP van Gurobi te gebruiken???'''
+
 from instance_toine import InstanceVerolog2019 # aangepast, bij class Request self.delivery_day toegevoegd
 import numpy as np
 import math
@@ -7,9 +10,10 @@ from gurobipy import *
 import time as time
 
 start = time.time()
-#lastige instances: early 6, early 11
 
-INSTANCE = 6
+
+INSTANCE = 5
+
 class Solution:
     class TruckRoute:
         def __init__(self, ID):
@@ -202,8 +206,7 @@ class Solution:
             self.Days[day-1].TruckRoutes.append(self.TruckRoute(c+1)) #voor iedere request, een nieuwe truck. Truck wordt toegevoegd op dag day-1
             self.Days[day-1].TruckRoutes[-1].RequestIDs.append(request.ID) # Voeg request id toe aan laatste truckroute in de list
     '''
-    def assign_trucks(self):
-
+    def assign_trucks(self): #initial schedule of the trucks
         undelivered_requests = self.Instance.Requests[:]
         for day in range(1,self.Instance.Days+1):
             requests_today = []
@@ -226,12 +229,12 @@ class Solution:
                         request_sets = [] #partitie van de requests op deze dag
                         current_request_set = [] 
                         current_volume_set = 0
+                    
                         
-                        #print(tsp_sol[0],"tsp")
-                        avg_volume = math.ceil(volume_today/k) #guideline for how much to put into each truck.  
+                        avg_volume = math.ceil(volume_today/k)  #verdeel zo gelijk mogelijk het gewicht over de k routes
                         
                         for request in tsp_sol[0]: # in order of the tour, requests that are put in same truck will be "close"
-                            if current_volume_set + request.amount*self.getMachine(request.machineID).size <= avg_volume:
+                            if current_volume_set + request.amount*self.getMachine(request.machineID).size <=avg_volume: #self.Instance.TruckCapacity: #
                                 current_request_set.append(request)
                                 current_volume_set += request.amount*self.getMachine(request.machineID).size
                                 
@@ -251,10 +254,8 @@ class Solution:
                                     
                                     if request == tsp_sol[0][-1]: # als het laatst request is, voeg dan de set toe
                                         request_sets.append(current_request_set)       
-    
-                        #verdeel zo gelijk mogelijk het gewicht over de k routes
-                        
-                        #print("request sets",request_sets, "\n")
+
+     
                         if len(request_sets) <= k: # dan is er een geldige partitie op basis van het volume
                             routes = []
                             
@@ -284,13 +285,6 @@ class Solution:
                                         self.Days[day-1].TruckRoutes[-1].RequestIDs.append(request.ID) # Voeg request id toe aan laatste truckroute in de list
                                         undelivered_requests.remove(request)
                                         request.delivery_day = day 
-                                        
-                                        
-                                '''        
-                                route_dict[day]= routes #route_dict aanmaken
-                                for i in range(len(routes)):    
-                                    for request in routes[i]:
-                                        undelivered_requests.remove(request)'''
                                 break
             
         if undelivered_requests == []:
@@ -322,7 +316,8 @@ class Solution:
                                     
                                     a = self.getRequest(self.Days[day-1].TechnicianRoutes[i].RequestIDs[-1]).customerLocID-1 # tot nu toe laatste request voor technician op deze dag
                                     b = request.customerLocID - 1 # locatie van huidige request
-                        
+                                    
+                                    ''' sub optimaal, beter overal TSP's '''
                                     if self.Days[day-1].TechnicianRoutes[i].DistanceTravelled + self.Instance.calcDistance[a][b] + self.Instance.calcDistance[b][technician.locationID - 1]<= technician.maxDayDistance:  
                                         feasible_technicians.append(technician) #distance travelled is de afstand tot de tot nu toe laatste request. 
                     
@@ -384,7 +379,7 @@ class Solution:
         
   
     
-    # assume all requests fit into truck. 
+    # dit berekent alle afstanden, input voor TSP 
     def distancesForTSP(self,requests):
         n = len(requests)+1
 
@@ -447,15 +442,96 @@ class Solution:
                 
         return amount_day
     
+    def optimize_route(self,IDs):
+        route = []
+        for r in IDs:
+                route.append(self.getRequest(r))
+            
+        arg = self.distancesForTSP(route)
+        tour = tsp(arg[0],arg[1],arg[2])
+        return tour    
+            
+    def combine_routes(self): #combines routes, goes back to depot in between
+        for  day in range(1,self.Instance.Days+1):  
+            tours_today = []
+            combined_tours = []
+            for route in self.Days[day-1].TruckRoutes:
+                optimized = self.optimize_route(route.RequestIDs)
+                tours_today.append(optimized)
     
+            
+            for k in range(len(tours_today)):
+                if tours_today !=[]:
+                    current_length = 0
+                    current_tour = []
+                    for tour in tours_today:
+                        if current_length + tour[1] <= self.Instance.TruckMaxDistance: # als dit niet geldt, dan kunnen de routes niet bij elkaar worden gevoegd
+                            current_length += tour[1]
+                            if current_tour !=[]:
+                                current_tour.append(0)
+                            for request in tour[0]:
+                                current_tour.append(request.ID)
+                            tours_today.remove(tour)    
+                    combined_tours.append(current_tour)
+            
+            self.Days[day-1].TruckRoutes = []
+            count = 1
+            for combined in combined_tours:
+                self.Days[day-1].TruckRoutes.append(self.TruckRoute(count))
+                self.Days[day-1].TruckRoutes[-1].RequestIDs = combined
+                count +=1 
+                
+    def merge_routes(self): #merges routes, without going back to depot
+        for day in range(1,self.Instance.Days+1):
+            unconsidered = self.Days[day-1].TruckRoutes[:]
+            
+            for route_a in unconsidered:
+                weight_a = 0
+                unconsidered.remove(route_a)
+                
+                for requestID in route_a.RequestIDs:
+                    request = self.getRequest(requestID)
+                    weight_a += request.amount*self.getMachine(request.machineID).size
+                    
+                for route_b in unconsidered:
+                    weight_b = 0
+                    
+                    for requestID in route_b.RequestIDs:
+                        request = self.getRequest(requestID)
+                        weight_b += request.amount*self.getMachine(request.machineID).size
+                        
+                    if weight_a + weight_b <=self.Instance.TruckCapacity:
+                        mergedIDs = route_a.RequestIDs + route_b.RequestIDs
+                        mergedRequests = []
+                        
+                        for ID in mergedIDs:
+                            mergedRequests.append(self.getRequest(ID))
+                        arg = self.distancesForTSP(mergedRequests)
+                        merged_tour = tsp(arg[0],arg[1],arg[2])
+                        
+                        if merged_tour[1]<= self.Instance.TruckMaxDistance:
+                            self.Days[day-1].TruckRoutes.remove(route_a)
+                            
+                            self.Days[day-1].TruckRoutes.remove(route_b)
+                            
+                    
+                            unconsidered.remove(route_b)
+                            
+                            self.Days[day-1].TruckRoutes.append(self.TruckRoute(route_a.TruckID)) #maak nieuwe truckroute, met ID van a
+                            self.Days[day-1].TruckRoutes[-1].RequestIDs = mergedIDs
+                    
+                            unconsidered.append(self.Days[day-1].TruckRoutes[-1]) 
+                            break
+                    
+
 
 def tsp(n, distances,request_dict):  
     
     if n <= 2: # tsp alg werkt niet voor n=2
         TSP = []
         for i,j in request_dict.items():    
-                    if 1==j:
-                        TSP.append(i)    
+            TSP.append(i)        
+                        
         return TSP,2*distances[0,1]
         
     else: #functie van gurobi!
@@ -528,37 +604,57 @@ def tsp(n, distances,request_dict):
                 for i,j in request_dict.items():    
                     if v==j:
                         TSP.append(i)    
-    
-    
             return TSP,m.ObjVal
 
 
 def main():
     global problem, solution
-    instance_file = 'instance/VSC2019_EX01.txt'
-    #instance_file = 'instance/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
-    output_file ='solution//VSC2019_EX01-solution.txt'
+    
+    instance_file = 'instance/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
     #instance_file = 'instance/STUDENT%03d.txt' % INSTANCE
-    #output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
+    output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
     #output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE 
+    
+    #instance_file = 'instance/VSC2019_EX01.txt'
+    #output_file ='solution//VSC2019_EX01-solution.txt'
+    
     
     problem = InstanceVerolog2019(instance_file)
     problem.calculateDistances() 
     solution = Solution(problem)
     
     solution.matches()
-
+    
+    # verdeelt de requests gelijk over een aantal dagen. De loop gaat over het aantal dagen: begin met zo veel mogelijk dagen, dan zijn er zo min mogelijk trucks. Stopt als het feasible is 
     for k in reversed(range(1,solution.Instance.Days)):
         solution.spread_requests(k)
         if solution.assign_trucks():
             if solution.assign_technicians():
                 break
-                
-                
+     
+        
+        
+    solution.merge_routes()
+    
+    solution.combine_routes() # combineert routes: laat een truck meerdere routes doen (tussendoor terug naar depot)
+
+    
+    
+    ''' Faalt nog: maakt gebruik via optimize_route van distances for tsp, maar de thuislocatie is niet depot; distances tsp aanpassen 
+    #optimize technician distance    
+    for day in range(1,solution.Instance.Days+1):  
+        for technician_route in solution.Days[day-1].TechnicianRoutes:
+            IDs = technician_route.RequestIDs
+            optimized = solution.optimize_route(IDs) 
+            technician_route.RequestIDs = []
+            for request in optimized[0]:
+                technician_route.RequestIDs.append(request.ID)    '''
+
+        
+      
     solution.calculate()
     solution.writeSolution(output_file)
     
-    #print(solution.spread_requests())
     
     end = time.time()
     
