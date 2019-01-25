@@ -2,8 +2,10 @@
 
 from InstanceCreator import InstanceCreator
 from queue import PriorityQueue
+import random
 
-""" TO VALIDATE, USE python SolutionVerolog2019.py -i data/STUDENT002.txt –s solution/STUDENT002-solution.txt """
+""" TO VALIDATE, USE python SolutionVerolog2019.py -i data/STUDENT002.txt –s solution/STUDENT002-solution.txt
+    OR python SolutionVerolog2019.py -i data/VSC2019_ORTEC_early_01.txt –s solution/VSC2019_ORTEC_early_01-solution.txt """
 # Restrictions
 
 # All requests must be delivered
@@ -201,7 +203,7 @@ class Solution:
 
                         distance = self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1]
                         volume = request.amount * self.getMachine(request.machineID).size
-                        self.shortestPath.put((distance - volume + request.ID, [distance, volume, truck.TruckID, request]))
+                        self.shortestPath.put((distance - volume + random.random(), [distance, volume, truck.TruckID, request]))
 
         if self.shortestPath.empty():
             return False
@@ -222,7 +224,7 @@ class Solution:
 
                     dist = self.Instance.calcDistance[self.depot - 1][request.customerLocID - 1]
                     vol = request.amount * self.getMachine(request.machineID).size
-                    noTrucksQueue.put((dist - vol + request.ID, [dist, vol, request]))
+                    noTrucksQueue.put((dist - vol + random.random(), [dist, vol, request]))
 
         requestToDo = noTrucksQueue.qsize()
 
@@ -269,7 +271,6 @@ class Solution:
                     truckID = self.numberOfTrucks[day - 1]
                     self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
                     self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
-
                     self.capacityUsedTrucks[day - 1].append(volume)
                     self.distanceMadeTrucks[day - 1].append(distance)
                     self.currentLocationTrucks[day - 1].append(request.customerLocID)
@@ -278,6 +279,69 @@ class Solution:
                     requestToDo -= 1
                 else:
                     break
+
+
+
+        """ Merge trucks together if possible. """
+        # Calculate route distance of all trucks on given day
+        for truckID in range(1, self.numberOfTrucks[day - 1] + 1):
+            headToDepot = self.Instance.calcDistance[self.currentLocationTrucks[day - 1][truckID - 1] - 1][self.depot - 1]
+            self.distanceMadeTrucks[day - 1][truckID - 1] += headToDepot
+
+        merging = True
+
+        while merging:
+            self.distancesTrucks = PriorityQueue()
+
+            for truckID in range(1, self.numberOfTrucks[day - 1] + 1):
+                routeLength = self.distanceMadeTrucks[day - 1][truckID - 1]
+                self.distancesTrucks.put((routeLength + random.random(), [routeLength, truckID]))
+
+            if self.distancesTrucks.qsize() >= 2:
+                [score1, [length1, truckID1]] = list(self.distancesTrucks.get())
+                [score2, [length2, truckID2]] = list(self.distancesTrucks.get())
+
+                route1 = self.Days[day - 1].TruckRoutes[truckID1 - 1].RequestIDs
+                route2 = self.Days[day - 1].TruckRoutes[truckID2 - 1].RequestIDs
+
+                if length1 + length2 <= self.Instance.TruckMaxDistance:
+                    if truckID1 < truckID2:
+                        truckKept = truckID1
+                        truckDeleted = truckID2
+                        routeKept = route1
+                        routeDeleted = route2
+                    else:
+                        truckKept = truckID2
+                        truckDeleted = truckID1
+                        routeKept = route2
+                        routeDeleted = route1
+
+                    # head to depot before merging the second route
+                    self.Days[day - 1].TruckRoutes[truckKept - 1].RequestIDs.append(0)
+                    # merge routes together
+                    for requestID in routeDeleted:
+                        self.Days[day - 1].TruckRoutes[truckKept - 1].RequestIDs.append(requestID)
+                    self.distanceMadeTrucks[day - 1][truckKept - 1] += self.distanceMadeTrucks[day - 1][truckDeleted - 1]
+                    self.currentLocationTrucks[day - 1][truckKept - 1] = self.currentLocationTrucks[day - 1][truckDeleted - 1]
+                    self.capacityUsedTrucks[day - 1][truckKept - 1] = self.capacityUsedTrucks[day - 1][truckDeleted - 1]
+
+                    for truck in self.Days[day - 1].TruckRoutes:
+                        if truck.TruckID > truckDeleted:
+                            truck.TruckID -= 1
+
+                    # delete redundant truck
+                    del self.Days[day - 1].TruckRoutes[truckDeleted - 1]
+                    del self.distanceMadeTrucks[day - 1][truckDeleted - 1]
+                    del self.currentLocationTrucks[day - 1][truckDeleted - 1]
+                    del self.capacityUsedTrucks[day - 1][truckDeleted - 1]
+                    self.numberOfTrucks[day - 1] -= 1
+
+
+
+                else:
+                    merging = False
+            else:
+                merging = False
 
     def matchesTechnician(self, day):
         self.TechnicianMatches = {}
@@ -299,7 +363,7 @@ class Solution:
                             self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] \
                             <= technician.maxDayDistance:
                                 distance = self.Instance.calcDistance[currentLocationTechnician - 1][request.customerLocID - 1]
-                                score = distance - self.distanceMadeTechnicians[day - 1][technician.ID - 1] - 0.001 * request.ID
+                                score = distance - self.distanceMadeTechnicians[day - 1][technician.ID - 1] + random.random()
                                 self.TechnicianMatches[technician].put((score, [distance, request]))
 
         noMatches = [technician for technician, matches in self.TechnicianMatches.items() if matches.empty()]
@@ -359,8 +423,9 @@ class Solution:
                     # try to assign first request to a technician that has worked earlier before
                     if technician.used and technician.forcedBreak == 0 and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
                         dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                        score = self.totalDistance[technician] + dist - technician.maxDayDistance - 0.001 * request.ID
-                        self.closestRequest.put((score, [dist, technician, request]))
+                        score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
+                        if 2 * dist <= technician.maxDayDistance:
+                            self.closestRequest.put((score, [dist, technician, request]))
 
             # not a single technician has worked before
             if self.closestRequest.empty():
@@ -371,8 +436,9 @@ class Solution:
                     for request in self.Instance.Requests:
                         if technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
                             dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                            score = self.totalDistance[technician] + dist - technician.maxDayDistance - 0.001 * request.ID
-                            self.firstRequest.put((score, [dist, technician, request]))
+                            score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
+                            if 2 * dist <= technician.maxDayDistance:
+                                self.firstRequest.put((score, [dist, technician, request]))
 
                 [score, [distance, technician, request]] = list(self.firstRequest.get())
 
@@ -415,8 +481,9 @@ class Solution:
                         for request in self.Instance.Requests:
                             if technician.used == False and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
                                 dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                                score = dist - technician.maxDayDistance - 0.001 * request.ID
-                                self.assignNewTechnician.put((score, [dist, technician, request]))
+                                score = dist - technician.maxDayDistance + random.random()
+                                if 2 * dist <= technician.maxDayDistance:
+                                    self.assignNewTechnician.put((score, [dist, technician, request]))
                     if self.assignNewTechnician.qsize() > 0:
                         [score, [distance, technician, request]] = list(self.assignNewTechnician.get())
                         technician.used = True
@@ -459,7 +526,6 @@ class Solution:
             if technician.consecutiveDays == 5:
                 technician.forcedBreak = 2
                 technician.consecutiveDays = 0
-
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
