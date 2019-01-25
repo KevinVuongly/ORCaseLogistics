@@ -243,7 +243,6 @@ class Solution:
             requestToDo -= 1
 
         while requestToDo > 0:
-
             matches = self.matchesTrucks(day)
 
             # assign request to an existing truck
@@ -280,8 +279,9 @@ class Solution:
                 else:
                     break
 
+        self.mergeTrucks(day)
 
-
+    def mergeTrucks(self, day):
         """ Merge trucks together if possible. """
         # Calculate route distance of all trucks on given day
         for truckID in range(1, self.numberOfTrucks[day - 1] + 1):
@@ -336,14 +336,13 @@ class Solution:
                     del self.capacityUsedTrucks[day - 1][truckDeleted - 1]
                     self.numberOfTrucks[day - 1] -= 1
 
-
-
                 else:
                     merging = False
             else:
                 merging = False
 
     def matchesTechnician(self, day):
+        """ Compute all requests a technician(that is working!) can do on the given day. """
         self.TechnicianMatches = {}
 
         for technician in self.Instance.Technicians:
@@ -397,7 +396,7 @@ class Solution:
                     self.totalDistance[technician] += self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
 
         # initialize dict of working technicians on given day
-        workingTechnicians = {}
+        self.workingTechnicians = {}
 
         # calculate amount of requests to install
         requestsToInstall = 0
@@ -415,102 +414,7 @@ class Solution:
                 technician.consecutiveDays = 0
 
         if requestsToInstall > 0:
-            # assign very first request of the day to a technician
-
-            self.closestRequest = PriorityQueue()
-            for technician in self.Instance.Technicians:
-                for request in self.Instance.Requests:
-                    # try to assign first request to a technician that has worked earlier before
-                    if technician.used and technician.forcedBreak == 0 and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
-                        dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                        score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
-                        if 2 * dist <= technician.maxDayDistance:
-                            self.closestRequest.put((score, [dist, technician, request]))
-
-            # not a single technician has worked before
-            if self.closestRequest.empty():
-
-                self.firstRequest = PriorityQueue()
-
-                for technician in self.Instance.Technicians:
-                    for request in self.Instance.Requests:
-                        if technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
-                            dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                            score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
-                            if 2 * dist <= technician.maxDayDistance:
-                                self.firstRequest.put((score, [dist, technician, request]))
-
-                [score, [distance, technician, request]] = list(self.firstRequest.get())
-
-            # assign first request to a technician that has worked before
-            else:
-                [score, [distance, technician, request]] = list(self.closestRequest.get())
-
-            if technician.workedToday == False:
-                technician.workedToday = True
-                technician.consecutiveDays += 1
-                technician.used = True
-
-            self.distanceMadeTechnicians[day - 1][technician.ID - 1] += distance
-            self.currentLocationTechnicians[day - 1][technician.ID - 1] = request.customerLocID
-            self.numberOfInstallationsTechnicians[day - 1][technician.ID - 1] += 1
-            problem.Requests[request.ID - 1].installed = True
-            requestsToInstall -= 1
-
-            if technician.ID not in workingTechnicians:
-                workingTechnicians[technician.ID] = [request.ID]
-            else:
-                workingTechnicians[technician.ID].append(request.ID)
-
-            """
-            Assign rest of the requests on given day
-            """
-
-            while requestsToInstall > 0:
-                matches = self.matchesTechnician(day)
-
-                # assign request to a technician that has worked before
-                if matches:
-                    [score, [distance, technician, request]] = list(self.greedyTechnicianMatch.get())
-
-                # assign request to a new technician
-                else:
-                    self.assignNewTechnician = PriorityQueue()
-
-                    for technician in self.Instance.Technicians:
-                        for request in self.Instance.Requests:
-                            if technician.used == False and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
-                                dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
-                                score = dist - technician.maxDayDistance + random.random()
-                                if 2 * dist <= technician.maxDayDistance:
-                                    self.assignNewTechnician.put((score, [dist, technician, request]))
-                    if self.assignNewTechnician.qsize() > 0:
-                        [score, [distance, technician, request]] = list(self.assignNewTechnician.get())
-                        technician.used = True
-                    else:
-                        break
-
-                if technician.workedToday == False:
-                    technician.workedToday = True
-                    technician.consecutiveDays += 1
-                    technician.used = True
-
-                self.distanceMadeTechnicians[day - 1][technician.ID - 1] += distance
-                self.currentLocationTechnicians[day - 1][technician.ID - 1] = request.customerLocID
-                self.numberOfInstallationsTechnicians[day - 1][technician.ID - 1] += 1
-                problem.Requests[request.ID - 1].installed = True
-                requestsToInstall -= 1
-
-                if technician.ID not in workingTechnicians:
-                    workingTechnicians[technician.ID] = [request.ID]
-                else:
-                    workingTechnicians[technician.ID].append(request.ID)
-
-            # add routes of working technicians to the given day
-            for key, value in sorted(workingTechnicians.items()):
-                self.Days[day - 1].TechnicianRoutes.append(self.TechnicianRoute(key))
-                for request in value:
-                    self.Days[day - 1].TechnicianRoutes[-1].RequestIDs.append(request)
+            self.assignRequestTechnician(day, requestsToInstall)
 
         # set shipped requests to delivered for the following day
         for request in self.Instance.Requests:
@@ -526,6 +430,104 @@ class Solution:
             if technician.consecutiveDays == 5:
                 technician.forcedBreak = 2
                 technician.consecutiveDays = 0
+
+    def assignRequestTechnician(self, day, requestsToInstall):
+        # assign very first request of the day to a technician
+
+        self.closestRequest = PriorityQueue()
+        for technician in self.Instance.Technicians:
+            for request in self.Instance.Requests:
+                # try to assign first request to a technician that has worked earlier before
+                if technician.used and technician.forcedBreak == 0 and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
+                    dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
+                    score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
+                    if 2 * dist <= technician.maxDayDistance:
+                        self.closestRequest.put((score, [dist, technician, request]))
+
+        # not a single technician has worked before
+        if self.closestRequest.empty():
+
+            self.firstRequest = PriorityQueue()
+
+            for technician in self.Instance.Technicians:
+                for request in self.Instance.Requests:
+                    if technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
+                        dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
+                        score = self.totalDistance[technician] + dist - technician.maxDayDistance + random.random()
+                        if 2 * dist <= technician.maxDayDistance:
+                            self.firstRequest.put((score, [dist, technician, request]))
+
+            [score, [distance, technician, request]] = list(self.firstRequest.get())
+
+        # assign first request to a technician that has worked before
+        else:
+            [score, [distance, technician, request]] = list(self.closestRequest.get())
+
+        if technician.workedToday == False:
+            technician.workedToday = True
+            technician.consecutiveDays += 1
+            technician.used = True
+
+        self.distanceMadeTechnicians[day - 1][technician.ID - 1] += distance
+        self.currentLocationTechnicians[day - 1][technician.ID - 1] = request.customerLocID
+        self.numberOfInstallationsTechnicians[day - 1][technician.ID - 1] += 1
+        problem.Requests[request.ID - 1].installed = True
+        requestsToInstall -= 1
+
+        if technician.ID not in self.workingTechnicians:
+            self.workingTechnicians[technician.ID] = [request.ID]
+        else:
+            self.workingTechnicians[technician.ID].append(request.ID)
+
+        """
+        Assign rest of the requests on given day
+        """
+
+        while requestsToInstall > 0:
+            matches = self.matchesTechnician(day)
+
+            # assign request to a technician that has worked before
+            if matches:
+                [score, [distance, technician, request]] = list(self.greedyTechnicianMatch.get())
+
+            # assign request to a new technician
+            else:
+                self.assignNewTechnician = PriorityQueue()
+
+                for technician in self.Instance.Technicians:
+                    for request in self.Instance.Requests:
+                        if technician.used == False and technician.capabilities[request.machineID - 1] and request.delivered and request.installed == False:
+                            dist = self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
+                            score = dist - technician.maxDayDistance + random.random()
+                            if 2 * dist <= technician.maxDayDistance:
+                                self.assignNewTechnician.put((score, [dist, technician, request]))
+                if self.assignNewTechnician.qsize() > 0:
+                    [score, [distance, technician, request]] = list(self.assignNewTechnician.get())
+                    technician.used = True
+                else:
+                    break
+
+            if technician.workedToday == False:
+                technician.workedToday = True
+                technician.consecutiveDays += 1
+                technician.used = True
+
+            self.distanceMadeTechnicians[day - 1][technician.ID - 1] += distance
+            self.currentLocationTechnicians[day - 1][technician.ID - 1] = request.customerLocID
+            self.numberOfInstallationsTechnicians[day - 1][technician.ID - 1] += 1
+            problem.Requests[request.ID - 1].installed = True
+            requestsToInstall -= 1
+
+            if technician.ID not in self.workingTechnicians:
+                self.workingTechnicians[technician.ID] = [request.ID]
+            else:
+                self.workingTechnicians[technician.ID].append(request.ID)
+
+        # add routes of working technicians to the given day
+        for key, value in sorted(self.workingTechnicians.items()):
+            self.Days[day - 1].TechnicianRoutes.append(self.TechnicianRoute(key))
+            for request in value:
+                self.Days[day - 1].TechnicianRoutes[-1].RequestIDs.append(request)
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
