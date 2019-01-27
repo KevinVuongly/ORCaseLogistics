@@ -362,48 +362,6 @@ class Solution:
                 if request.delivered and request.installed == False:
                     self.totalDistance[technician] += self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
 
-    def assignTechnicians(self, day):
-        """
-        Assign requests to technicians on given day
-        """
-
-        self.calcTotalDistance()
-
-        # initialize dict of working technicians on given day
-        self.workingTechnicians = {}
-
-        # calculate amount of requests to install
-        requestsToInstall = 0
-        for request in self.Instance.Requests:
-            if request.delivered and request.installed == False:
-                requestsToInstall += 1
-
-        # remember for all technicians if they have worked yesterday
-        for technician in self.Instance.Technicians:
-            if technician.workedToday:
-                technician.workedYesterday = True
-                technician.workedToday = False
-            else:
-                technician.workedYesterday = False
-                technician.consecutiveDays = 0
-
-        if requestsToInstall > 0:
-            self.assignRequestTechnician(day, requestsToInstall)
-
-        # set shipped requests to delivered for the following day
-        for request in self.Instance.Requests:
-            if problem.Requests[request.ID - 1].shipped == True:
-                problem.Requests[request.ID - 1].delivered = True
-
-        # force technician a break of 2 days if they have worked for 5 consecutive days
-        for technician in self.Instance.Technicians:
-            if technician.forcedBreak > 0:
-                technician.forcedBreak -= 1
-
-            if technician.consecutiveDays == 5:
-                technician.forcedBreak = 2
-                technician.consecutiveDays = 0
-
     def assignRequestTechnician(self, day, requestsToInstall):
         # assign very first request of the day to a technician
 
@@ -474,6 +432,7 @@ class Solution:
                             score = dist - technician.maxDayDistance + random.random()
                             if 2 * dist <= technician.maxDayDistance:
                                 self.assignNewTechnician.put((score, [dist, technician, request]))
+
                 if self.assignNewTechnician.qsize() > 0:
                     [score, [distance, technician, request]] = list(self.assignNewTechnician.get())
                     technician.used = True
@@ -501,6 +460,48 @@ class Solution:
             self.Days[day - 1].TechnicianRoutes.append(self.TechnicianRoute(key))
             for request in value:
                 self.Days[day - 1].TechnicianRoutes[-1].RequestIDs.append(request)
+
+    def assignTechnicians(self, day):
+        """
+        Assign requests to technicians on given day
+        """
+
+        self.calcTotalDistance()
+
+        # initialize dict of working technicians on given day
+        self.workingTechnicians = {}
+
+        # calculate amount of requests to install
+        requestsToInstall = 0
+        for request in self.Instance.Requests:
+            if request.delivered and request.installed == False:
+                requestsToInstall += 1
+
+        # remember for all technicians if they have worked yesterday
+        for technician in self.Instance.Technicians:
+            if technician.workedToday:
+                technician.workedYesterday = True
+                technician.workedToday = False
+            else:
+                technician.workedYesterday = False
+                technician.consecutiveDays = 0
+
+        if requestsToInstall > 0:
+            self.assignRequestTechnician(day, requestsToInstall)
+
+        # set shipped requests to delivered for the following day
+        for request in self.Instance.Requests:
+            if problem.Requests[request.ID - 1].shipped == True:
+                problem.Requests[request.ID - 1].delivered = True
+
+        # force technician a break of 2 days if they have worked for 5 consecutive days
+        for technician in self.Instance.Technicians:
+            if technician.forcedBreak > 0:
+                technician.forcedBreak -= 1
+
+            if technician.consecutiveDays >= 5:
+                technician.forcedBreak = 2
+                technician.consecutiveDays = 0
 
     def progress(self):
         print('Request  Delivery  Installment  Idle time')
