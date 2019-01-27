@@ -6,35 +6,6 @@ import random
 
 """ TO VALIDATE, USE python SolutionVerolog2019.py -i data/STUDENT002.txt –s solution/STUDENT002-solution.txt
     OR python SolutionVerolog2019.py -i data/VSC2019_ORTEC_early_01.txt –s solution/VSC2019_ORTEC_early_01-solution.txt """
-# Restrictions
-
-# All requests must be delivered
-# All requests must be installed
-# Each installment has to be after delivery
-# Max capacity of truck may not be exceeded
-# Max distance of truck may not be exceeded
-# Max distance for each technician
-# Max number of installments for each technician
-# Technician can only handle certain machines
-# Technicians need two days off after 5 days of working
-# Technicians need one day off after 4 days of working
-
-# Sort requests with on top the ones that are least flexible (technicians)
-# Sort technicians with on top the ones that are least flexible
-
-# Step 1: assign requests to technicians, distribute equally (switching if needed)
-# Step 2: assign days to requests, start with the ones that are least flexible (time window)
-#         as late as possible, restrictions: technician days off, technician max day distance
-
-# step 3: assign request to delivery days, distribute as equally as possible
-# step 4: assign request to truck routes
-
-# step 5: calculate total costs
-
-# improve
-
-# subproblem is Travelers Salesmen Problem
-
 
 class Solution:
     class TruckRoute:
@@ -420,7 +391,6 @@ class Solution:
         for request in self.Instance.Requests:
             if problem.Requests[request.ID - 1].shipped == True:
                 problem.Requests[request.ID - 1].delivered = True
-
 
         # force technician a break of 2 days if they have worked for 5 consecutive days
         for technician in self.Instance.Technicians:
