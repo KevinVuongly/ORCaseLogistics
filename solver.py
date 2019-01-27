@@ -351,11 +351,7 @@ class Solution:
 
         return True
 
-    def assignTechnicians(self, day):
-        """
-        Assign requests to technicians on given day
-        """
-
+    def calcTotalDistance(self):
         # the total distance of a technician to all unassigned request(used as heuristic!!)
         self.totalDistance = {}
         for technician in self.Instance.Technicians:
@@ -365,6 +361,13 @@ class Solution:
             for request in self.Instance.Requests:
                 if request.delivered and request.installed == False:
                     self.totalDistance[technician] += self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
+
+    def assignTechnicians(self, day):
+        """
+        Assign requests to technicians on given day
+        """
+
+        self.calcTotalDistance()
 
         # initialize dict of working technicians on given day
         self.workingTechnicians = {}
