@@ -12,6 +12,9 @@ class Solution:
         def __init__(self, ID):
             self.TruckID = ID
             self.RequestIDs = []
+            self.currentLocation = 1
+            self.capacityUsed = 0
+            self.distanceMade = 0
 
         def __repr__(self):
             return '%d %s' % (self.TruckID, ' '.join(map(str, self.RequestIDs)))
@@ -48,13 +51,11 @@ class Solution:
         self.depot = 1
 
         self.numberOfTrucks = [0 for days in range(self.Instance.Days)]
-        self.capacityUsedTrucks = [[] for days in range(self.Instance.Days)]
-        self.distanceMadeTrucks = [[] for days in range(self.Instance.Days)]
-        self.currentLocationTrucks = [[] for days in range(self.Instance.Days)]
+        self.numberOfHiredTechnicians = 0
 
-        self.distanceMadeTechnicians = [[0 for maxTechnicians in range(len(self.Instance.Technicians))] for days in range(self.Instance.Days)]
+        self.distanceMadeTechnicians = [[0 for technicians in range(len(self.Instance.Technicians))] for days in range(self.Instance.Days)]
         self.currentLocationTechnicians = [[self.Instance.Technicians[Technician].locationID for Technician in range(len(self.Instance.Technicians))] for days in range(self.Instance.Days)]
-        self.numberOfInstallationsTechnicians = [[0 for maxTechnicians in range(len(self.Instance.Technicians))] for days in range(self.Instance.Days)]
+        self.numberOfInstallationsTechnicians = [[0 for technicians in range(len(self.Instance.Technicians))] for days in range(self.Instance.Days)]
 
     def writeSolution(self, filename):
         try:
@@ -164,12 +165,12 @@ class Solution:
         for request in self.Instance.Requests:
             if request.shipped == False and request.fromDay <= day <= request.toDay:
                 for truck in self.Days[day - 1].TruckRoutes:
-                    currentLocationTruck = self.currentLocationTrucks[day - 1][truck.TruckID - 1]
+                    currentLocationTruck = self.Days[day - 1].TruckRoutes[truck.TruckID - 1].currentLocation
 
-                    if self.distanceMadeTrucks[day - 1][truck.TruckID - 1] + \
+                    if self.Days[day - 1].TruckRoutes[truck.TruckID - 1].distanceMade + \
                     self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1] + \
                     self.Instance.calcDistance[request.customerLocID - 1][self.depot - 1] <= self.Instance.TruckMaxDistance \
-                    and self.capacityUsedTrucks[day - 1][truck.TruckID - 1] + request.amount * self.getMachine(request.machineID).size \
+                    and self.Days[day - 1].TruckRoutes[truck.TruckID - 1].capacityUsed + request.amount * self.getMachine(request.machineID).size \
                     <= self.Instance.TruckCapacity:
 
                         distance = self.Instance.calcDistance[currentLocationTruck - 1][request.customerLocID - 1]
@@ -206,9 +207,9 @@ class Solution:
             self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
             self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
 
-            self.capacityUsedTrucks[day - 1].append(volume)
-            self.distanceMadeTrucks[day - 1].append(distance)
-            self.currentLocationTrucks[day - 1].append(request.customerLocID)
+            self.Days[day - 1].TruckRoutes[truckID - 1].capacityUsed += volume
+            self.Days[day - 1].TruckRoutes[truckID - 1].distanceMade += distance
+            self.Days[day - 1].TruckRoutes[truckID - 1].currentLocation = request.customerLocID
 
             request.shipped = True
             requestToDo -= 1
@@ -223,9 +224,9 @@ class Solution:
 
                 self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
 
-                self.capacityUsedTrucks[day - 1][truckID - 1] += volume
-                self.distanceMadeTrucks[day - 1][truckID - 1] += distance
-                self.currentLocationTrucks[day - 1][truckID - 1] = request.customerLocID
+                self.Days[day - 1].TruckRoutes[truckID - 1].capacityUsed += volume
+                self.Days[day - 1].TruckRoutes[truckID - 1].distanceMade += distance
+                self.Days[day - 1].TruckRoutes[truckID - 1].currentLocation = request.customerLocID
 
                 request.shipped = True
                 requestToDo -= 1
@@ -241,9 +242,9 @@ class Solution:
                     truckID = self.numberOfTrucks[day - 1]
                     self.Days[day - 1].TruckRoutes.append(self.TruckRoute(truckID))
                     self.Days[day - 1].TruckRoutes[truckID - 1].RequestIDs.append(request.ID)
-                    self.capacityUsedTrucks[day - 1].append(volume)
-                    self.distanceMadeTrucks[day - 1].append(distance)
-                    self.currentLocationTrucks[day - 1].append(request.customerLocID)
+                    self.Days[day - 1].TruckRoutes[truckID - 1].capacityUsed += volume
+                    self.Days[day - 1].TruckRoutes[truckID - 1].distanceMade += distance
+                    self.Days[day - 1].TruckRoutes[truckID - 1].currentLocation = request.customerLocID
 
                     request.shipped = True
                     requestToDo -= 1
@@ -256,8 +257,8 @@ class Solution:
         """ Merge trucks together if possible. """
         # Calculate route distance of all trucks on given day
         for truckID in range(1, self.numberOfTrucks[day - 1] + 1):
-            headToDepot = self.Instance.calcDistance[self.currentLocationTrucks[day - 1][truckID - 1] - 1][self.depot - 1]
-            self.distanceMadeTrucks[day - 1][truckID - 1] += headToDepot
+            headToDepot = self.Instance.calcDistance[self.Days[day - 1].TruckRoutes[truckID - 1].currentLocation - 1][self.depot - 1]
+            self.Days[day - 1].TruckRoutes[truckID - 1].distanceMade += headToDepot
 
         merging = True
 
@@ -265,7 +266,7 @@ class Solution:
             self.distancesTrucks = PriorityQueue()
 
             for truckID in range(1, self.numberOfTrucks[day - 1] + 1):
-                routeLength = self.distanceMadeTrucks[day - 1][truckID - 1]
+                routeLength = self.Days[day - 1].TruckRoutes[truckID - 1].distanceMade
                 self.distancesTrucks.put((routeLength + random.random(), [routeLength, truckID]))
 
             if self.distancesTrucks.qsize() >= 2:
@@ -292,9 +293,9 @@ class Solution:
                     # merge routes together
                     for requestID in routeDeleted:
                         self.Days[day - 1].TruckRoutes[truckKept - 1].RequestIDs.append(requestID)
-                    self.distanceMadeTrucks[day - 1][truckKept - 1] += self.distanceMadeTrucks[day - 1][truckDeleted - 1]
-                    self.currentLocationTrucks[day - 1][truckKept - 1] = self.currentLocationTrucks[day - 1][truckDeleted - 1]
-                    self.capacityUsedTrucks[day - 1][truckKept - 1] = self.capacityUsedTrucks[day - 1][truckDeleted - 1]
+                    self.Days[day - 1].TruckRoutes[truckKept - 1].distanceMade += self.Days[day - 1].TruckRoutes[truckDeleted - 1].distanceMade
+                    self.Days[day - 1].TruckRoutes[truckKept - 1].currentLocation = self.Days[day - 1].TruckRoutes[truckDeleted - 1].currentLocation
+                    self.Days[day - 1].TruckRoutes[truckKept - 1].capacityUsed = self.Days[day - 1].TruckRoutes[truckDeleted - 1].capacityUsed
 
                     for truck in self.Days[day - 1].TruckRoutes:
                         if truck.TruckID > truckDeleted:
@@ -302,9 +303,6 @@ class Solution:
 
                     # delete redundant truck
                     del self.Days[day - 1].TruckRoutes[truckDeleted - 1]
-                    del self.distanceMadeTrucks[day - 1][truckDeleted - 1]
-                    del self.currentLocationTrucks[day - 1][truckDeleted - 1]
-                    del self.capacityUsedTrucks[day - 1][truckDeleted - 1]
                     self.numberOfTrucks[day - 1] -= 1
 
                 else:
@@ -362,9 +360,9 @@ class Solution:
                 if request.delivered and request.installed == False:
                     self.totalDistance[technician] += self.Instance.calcDistance[technician.locationID - 1][request.customerLocID - 1]
 
-    def assignRequestTechnician(self, day, requestsToInstall):
-        # assign very first request of the day to a technician
+    def assignRequestTechnician(self, day, requestsToInstall, maxTechnicians):
 
+        # assign very first request of the day to a technician
         self.closestRequest = PriorityQueue()
         for technician in self.Instance.Technicians:
             for request in self.Instance.Requests:
@@ -389,6 +387,7 @@ class Solution:
                             self.firstRequest.put((score, [dist, technician, request]))
 
             [score, [distance, technician, request]] = list(self.firstRequest.get())
+            self.numberOfHiredTechnicians += 1
 
         # assign first request to a technician that has worked before
         else:
@@ -414,7 +413,7 @@ class Solution:
         Assign rest of the requests on given day
         """
 
-        while requestsToInstall > 0:
+        while requestsToInstall > 0 and self.numberOfHiredTechnicians < maxTechnicians:
             matches = self.matchesTechnician(day)
 
             # assign request to a technician that has worked before
@@ -436,6 +435,7 @@ class Solution:
                 if self.assignNewTechnician.qsize() > 0:
                     [score, [distance, technician, request]] = list(self.assignNewTechnician.get())
                     technician.used = True
+                    self.numberOfHiredTechnicians += 1
                 else:
                     break
 
@@ -456,12 +456,12 @@ class Solution:
                 self.workingTechnicians[technician.ID].append(request.ID)
 
         # add routes of working technicians to the given day
-        for key, value in sorted(self.workingTechnicians.items()):
-            self.Days[day - 1].TechnicianRoutes.append(self.TechnicianRoute(key))
-            for request in value:
+        for technicianID, route in sorted(self.workingTechnicians.items()):
+            self.Days[day - 1].TechnicianRoutes.append(self.TechnicianRoute(technicianID))
+            for request in route:
                 self.Days[day - 1].TechnicianRoutes[-1].RequestIDs.append(request)
 
-    def assignTechnicians(self, day):
+    def assignTechnicians(self, day, maxTechnicians):
         """
         Assign requests to technicians on given day
         """
@@ -487,7 +487,7 @@ class Solution:
                 technician.consecutiveDays = 0
 
         if requestsToInstall > 0:
-            self.assignRequestTechnician(day, requestsToInstall)
+            self.assignRequestTechnician(day, requestsToInstall, maxTechnicians)
 
         # set shipped requests to delivered for the following day
         for request in self.Instance.Requests:
@@ -539,9 +539,11 @@ def main():
     Start of algorithm
     """
     maxTrucks = 1
+    maxTechnicians = 1
     feasible = False
 
     while feasible == False:
+        deliveredRequests = 0
         installedRequests = 0
 
         problem = InstanceCreator(instance_file)
@@ -550,16 +552,24 @@ def main():
 
         for day in range(1, solution.Instance.Days + 1):
             solution.assignTrucks(day, maxTrucks)
-            solution.assignTechnicians(day)
+            solution.assignTechnicians(day, maxTechnicians)
 
         for request in solution.Instance.Requests:
-            if request.installed == False:
+            if request.delivered == False:
                 maxTrucks += 1
                 break
             else:
-                installedRequests += 1
+                deliveredRequests += 1
 
-        if installedRequests == len(solution.Instance.Requests):
+        if deliveredRequests == len(solution.Instance.Requests):
+            for request in solution.Instance.Requests:
+                if request.installed == False:
+                    maxTechnicians += 1
+                    break
+                else:
+                    installedRequests += 1
+
+        if deliveredRequests == len(solution.Instance.Requests) and installedRequests == len(solution.Instance.Requests):
             feasible = True
 
     solution.calculate()
