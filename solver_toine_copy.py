@@ -1,36 +1,30 @@
 # Vehicle Routing
 
-
-''' Toegestaan om TSP van Gurobi te gebruiken???'''
-
 from instance_toine import InstanceVerolog2019 # aangepast, bij class Request self.delivery_day toegevoegd
 import numpy as np
 import math
 from gurobipy import *
 import time as time
 
+TEST_FILE = True
+
 start = time.time()
 
-
-INSTANCE = 5
-
+INSTANCE = 9
 class Solution:
+    
     class TruckRoute:
         def __init__(self, ID):
             self.TruckID = ID
             self.RequestIDs = [] 
-            
-
         def __repr__(self):
             return '%d %s' % (self.TruckID, ' '.join(map(str, self.RequestIDs)))
 
     class TechnicianRoute:
         def __init__(self, ID):
             self.TechnicianID = ID
-            self.RequestIDs = [] 
-            ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
-            self.DistanceTravelled = 0 # De afstand die is afgelegd tot de laatste request, in volgorde van de requests (dus nog niet geoptimaliseerd)
-
+            self.RequestIDs = [] # Set of request IDs in this route
+            self.DistanceTravelled = 0 #  While building the Technician Route, this is the distance travelled until the last request, without optizing.
         def __repr__(self):
             return '%d %s' % (self.TechnicianID, ' '.join(map(str, self.RequestIDs)))
      
@@ -40,10 +34,9 @@ class Solution:
             self.NumberOfTrucks = 0
             self.TruckRoutes = []
             self.NumberOfTechnicians = 0
-            self.TechnicianRoutes = []     
-            ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
-            self.TechniciansWorking = [] # Dit houdt bij welke technicians al zijn ingedeeld op die dag
-            self.scheduled_today = []
+            self.TechnicianRoutes = [] 
+            self.TechniciansWorking = [] # The set of technicians working today, this is updated througout the algorithm
+            self.scheduled_today = [] # Scheduled delivery day, is updated throughout the algorithm
         
     def __init__(self, instance):
         self.Instance = instance
@@ -100,7 +93,14 @@ class Solution:
             if ID == request.ID:
                 return request
         return False
+    
+    def getTechnician(self,ID):
+        for technician in self.Instance.Technicians:
+            if ID == technician.ID:
+                return technician
+        return False
         
+    ''' calculates the cost of the solution'''
     def calculate(self):
         self.TruckDistance = 0
         self.NumberOfTruckDays = 0
@@ -153,7 +153,7 @@ class Solution:
                 machineID = request.machineID
                 idleTime = self.RequestInstallmentDays[request.ID] - self.RequestDeliveryDays[request.ID] - 1
                 idlePenalty = self.getMachine(machineID).idlePenalty
-                self.IdleMachineCosts += idleTime * idlePenalty
+                self.IdleMachineCosts += idleTime * idlePenalty * request.amount
         
         self.TotalCost = self.Instance.TruckDistanceCost * self.TruckDistance \
                        + self.Instance.TruckDayCost * self.NumberOfTruckDays \
@@ -163,41 +163,33 @@ class Solution:
                        + self.Instance.TechnicianCost * self.NumberOfTechniciansUsed \
                        + self.IdleMachineCosts
 
+    ''' This function creates lists for each request, containing the technicians that are able to carry out the installation. Next, the requests are sorted:
+        requests that have many matching technicians are given less priority (are put last in the ordered list) than the ones with few matching technicians.
+        This is done because jobs with few technicians are not flexible, it is easiest to assign technicians to those jobs first.'''
     def matches(self):
         self.RequestMatches = {}
-        self.TechnicianMatches = {}
-        self.number_matches = [] # list die aantal technicians geeft die matchen
+        self.number_matches = [] # list of technicians that can carry out the installation of the machine
         
-        
-        for technician in self.Instance.Technicians:
-            self.TechnicianMatches[technician.ID] = []
-
         for request in self.Instance.Requests:
             self.RequestMatches[request.ID] = []
             for technician in self.Instance.Technicians:
                 if technician.capabilities[request.machineID - 1]:
                     if 2 * self.Instance.calcDistance[request.customerLocID - 1][technician.locationID - 1] <= technician.maxDayDistance:
                         self.RequestMatches[request.ID].append(technician)
-                        self.TechnicianMatches[technician.ID].append(request)
+                        
         
-        ''' ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED ADDED'''
         for request in self.Instance.Requests:
             self.number_matches.append(len(self.RequestMatches[request.ID]))
-            '''
-            print(request.ID, end = ' - ')
-            for technician in self.RequestMatches[request.ID]:
-                print(technician.ID, end = ' ')
-            print()
-            '''
 
         
-        ''' requests op volgorde zetten: de requests die door de meeste technicians kunnen worden geinstalleerd als laatste'''
+        ''' Here, we order the requests. The requests that have least technicians that can install the request are put in front, the ones with most technicians are last'''
         pairs = zip(self.number_matches,self.Instance.Requests)
-        sorted_pairs = sorted(pairs, key=lambda pair: pair[0]) #sorteren op basis van aantal technicians die job kunnen doen
-        
+        sorted_pairs = sorted(pairs, key=lambda pair: pair[0]) # sorting based on the number of technicians that can perform the task. 
+
         self.sorted_requests = [x for y, x in sorted_pairs]
 
 
+    # This is the first approach: a very simple truck assignment function
     '''
     def assign_trucks(self): # assigns een truck voor iedere opdracht, voor iedere opdracht een nieuwe. Meteen als de opdracht available is bezorgen
         for request in self.Instance.Requests:
@@ -212,12 +204,12 @@ class Solution:
             requests_today = []
             volume_today = 0
             for request in undelivered_requests:
-                if  request.scheduled_delivery== day: # request.fromDay#
+                if  request.scheduled_delivery== day: #  request.scheduled_delivery is assigned when the function spread_requests is called.
                     requests_today.append(request)
                     volume_today += request.amount*self.getMachine(request.machineID).size #volume van deze request
                     
             if len(requests_today)>0:
-                arguments = self.distancesForTSP(requests_today)
+                arguments = self.distances_creator(requests_today,0)
                 n = arguments[0] 
                 distances = arguments[1]
                 request_dict = arguments[2]
@@ -295,14 +287,13 @@ class Solution:
       
         
     def assign_technicians(self):
-        uninstalled_requests = self.sorted_requests[:] # of gebruik self.Instance.Requests[:], niet op volgorde
-
+        uninstalled_requests = self.sorted_requests[:] # self.Instance.Requests[:]#
         for day in range(1,self.Instance.Days+1):
-
             for request in uninstalled_requests[:]:
+                
                 feasible_technicians = []    
    
-                if day>request.delivery_day: #request.fromDay :
+                if day>request.delivery_day: 
                     
                     for technician in self.Instance.Technicians:
                         if technician.capabilities[request.machineID - 1]:
@@ -313,13 +304,22 @@ class Solution:
                             else:
                                 i = self.Days[day-1].TechniciansWorking.index(technician.ID) #als technician al gebruikt is, vindt dit de index van deze technician
                                 if len(self.Days[day-1].TechnicianRoutes[i].RequestIDs) < technician.maxNrInstallations:
+                                    ''' # more precise, but requires more time. Not a big increase in performance for most instances.
+                                    expanded_requests = [request]  # set of requests by the technician, expanded with current request
                                     
+                                    for ID in self.Days[day-1].TechnicianRoutes[i].RequestIDs:
+                                        expanded_requests.append(self.getRequest(ID))
+                                    
+                                    
+                                    arg = solution.distances_creator(expanded_requests,technician.locationID)
+                                    if tsp(arg[0],arg[1],arg[2])[1]<= technician.maxDayDistance:
+                                        feasible_technicians.append(technician)
+                                    '''
                                     a = self.getRequest(self.Days[day-1].TechnicianRoutes[i].RequestIDs[-1]).customerLocID-1 # tot nu toe laatste request voor technician op deze dag
                                     b = request.customerLocID - 1 # locatie van huidige request
-                                    
-                                    ''' sub optimaal, beter overal TSP's '''
                                     if self.Days[day-1].TechnicianRoutes[i].DistanceTravelled + self.Instance.calcDistance[a][b] + self.Instance.calcDistance[b][technician.locationID - 1]<= technician.maxDayDistance:  
                                         feasible_technicians.append(technician) #distance travelled is de afstand tot de tot nu toe laatste request. 
+                                    
                     
                     for technician in feasible_technicians[:]:
                         
@@ -375,40 +375,11 @@ class Solution:
             return True 
         else:
             return False
-                     
         
-  
-    
-    # dit berekent alle afstanden, input voor TSP 
-    def distancesForTSP(self,requests):
-        n = len(requests)+1
-
-        #assign number from 1...n to each request
-        request_dict = {}
-        k = 1
-        for request in requests:
-            request_dict[request] = k
-            k = k+1
-        distances = {} #computes all distances
-
-        for i in requests:
-            for j in requests:
-                distances [request_dict[i],request_dict[j]] =  self.Instance.calcDistance[i.customerLocID-1][j.customerLocID-1]
-            distances [request_dict[i],0] = distances [0,request_dict[i]] =self.Instance.calcDistance[i.customerLocID-1][self.Instance.Locations[0].ID-1]
-        distances[0,0] = 0   
-        return n,distances,request_dict 
-    
-    def clean(self): # als deze functie wordt aangeroepen verwijdert deze eerst alle eerder ingevulde informatie 
-        for day in range(1,self.Instance.Days+1):
-            self.Days[day-1].TruckRoutes = []
-            self.Days[day-1].TechniciansWorking = []
-            self.Days[day-1].TechnicianRoutes= []
-            
-        for request in self.Instance.Requests:
-            request.delivery_day = None 
-            request.scheduled_delivery = None
-    
-    def spread_requests(self,nr_days): #tries to spread out the requests as evenly as possible, so that as few trucks as possible are necessary. Parameter days should be less than self.instance.days, but more than the last release date
+    '''this function spreads out the requests as evenly as possible among a given number of days, so that as few trucks as possible are necessary. 
+    Parameter days should be less than self.instance.days, but more than the last release date.'''
+       
+    def spread_requests(self,nr_days):  
         requests_per_day = math.ceil(len(self.Instance.Requests)/nr_days) # avg amount of requests per day
         
         
@@ -440,26 +411,60 @@ class Solution:
                 amount_day[day] -=1
                 amount_day[day+1] +=1
                 
-        return amount_day
     
-    def optimize_route(self,IDs):
+    def optimize_route(self,IDs,homeID): # computes a TSP tour on the given points; to minimize the tour. Input homeID is location ID for depot or technician home 
         route = []
         for r in IDs:
                 route.append(self.getRequest(r))
             
-        arg = self.distancesForTSP(route)
+        arg = self.distances_creator(route,homeID) # argument for TSP
         tour = tsp(arg[0],arg[1],arg[2])
         return tour    
             
-    def combine_routes(self): #combines routes, goes back to depot in between
+    
+    # dit berekent alle afstanden, input voor TSP 
+    def distances_creator(self,requests,homeID): # input: een verzameling requests, en een ID (kan depot ID zijn (0) of een locationID voor technician)
+        n = len(requests)+1
+
+        #assign number from 1...n to each request. 0 represents the depot or home location of technician
+        request_dict = {}
+        k = 1
+        for request in requests:
+            request_dict[request] = k
+            k = k+1
+        distances = {} #computes all distances
+
+        for i in requests:
+            for j in requests:
+                distances [request_dict[i],request_dict[j]] =  self.Instance.calcDistance[i.customerLocID-1][j.customerLocID-1]
+            distances [request_dict[i],0] = distances [0,request_dict[i]] =self.Instance.calcDistance[i.customerLocID-1][homeID-1]
+        distances[0,0] = 0   
+        return n,distances,request_dict 
+    
+    def clean(self): # If this function is called, it removes all information that was already added
+        for day in range(1,self.Instance.Days+1):
+            self.Days[day-1].TruckRoutes = []
+            self.Days[day-1].TechniciansWorking = []
+            self.Days[day-1].TechnicianRoutes= []
+            
+        for request in self.Instance.Requests:
+            request.delivery_day = None 
+            request.scheduled_delivery = None
+            
+
+
+
+    ''' This function combines truckroutes. If trucks have maximum load, but their distance travelled is relatively low, it may be possible to combine routes, 
+    by going back to the depot in between. If routes are combined, it decrease the number of trucks and it will leave all other costs the same.'''
+        
+    def combine_routes(self): 
         for  day in range(1,self.Instance.Days+1):  
             tours_today = []
             combined_tours = []
             for route in self.Days[day-1].TruckRoutes:
-                optimized = self.optimize_route(route.RequestIDs)
+                optimized = self.optimize_route(route.RequestIDs,1)
                 tours_today.append(optimized)
-    
-            
+                
             for k in range(len(tours_today)):
                 if tours_today !=[]:
                     current_length = 0
@@ -480,7 +485,8 @@ class Solution:
                 self.Days[day-1].TruckRoutes.append(self.TruckRoute(count))
                 self.Days[day-1].TruckRoutes[-1].RequestIDs = combined
                 count +=1 
-                
+    ''' If truckloads for some trucks are significantly below the max load, and truck distance is relatively low, it might be possible to combine routes 
+    (without going back to depot)'''            
     def merge_routes(self): #merges routes, without going back to depot
         for day in range(1,self.Instance.Days+1):
             unconsidered = self.Days[day-1].TruckRoutes[:]
@@ -506,7 +512,7 @@ class Solution:
                         
                         for ID in mergedIDs:
                             mergedRequests.append(self.getRequest(ID))
-                        arg = self.distancesForTSP(mergedRequests)
+                        arg = self.distances_creator(mergedRequests,1)
                         merged_tour = tsp(arg[0],arg[1],arg[2])
                         
                         if merged_tour[1]<= self.Instance.TruckMaxDistance:
@@ -523,7 +529,8 @@ class Solution:
                             unconsidered.append(self.Days[day-1].TruckRoutes[-1]) 
                             break
                     
-
+''' Computes TSP tour on the given points. Requires all distances between points as input. The TSP alg works with 0,1,...,n,
+ so the requests need to be mapped to one point in 1...n, this is the input  request_dict.'''
 
 def tsp(n, distances,request_dict):  
     
@@ -594,69 +601,100 @@ def tsp(n, distances,request_dict):
         m.params.LazyConstraints=1
         m.optimize(subtourelim)
         TSP = []
+        
         if m.status == GRB.Status.OPTIMAL:
             solution = m.getAttr('x', vars)
-            edges = [(i,j) for i in range(n) for j in range(n) if solution[i,j]>0.5]
-            final_tour = subtour(edges)
-        
-    
+            edges = [(i,j) for i in range(n) for j in range(n) if solution[i,j]>0.5] 
+            final_tour = subtour(edges) #Final tour always starts at 0, which is either the depot or home loction of technician 
+            print(final_tour,"tsp")
             for v in final_tour:
                 for i,j in request_dict.items():    
                     if v==j:
                         TSP.append(i)    
             return TSP,m.ObjVal
-
-
 def main():
     global problem, solution
     
-    instance_file = 'instance/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
+    #instance_file = 'instance/VSC2019_ORTEC_early_%02d.txt' % INSTANCE
     #instance_file = 'instance/STUDENT%03d.txt' % INSTANCE
-    output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
+    #output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % INSTANCE
     #output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE 
     
     #instance_file = 'instance/VSC2019_EX01.txt'
     #output_file ='solution//VSC2019_EX01-solution.txt'
     
-    
-    problem = InstanceVerolog2019(instance_file)
-    problem.calculateDistances() 
-    solution = Solution(problem)
-    
-    solution.matches()
-    
-    # verdeelt de requests gelijk over een aantal dagen. De loop gaat over het aantal dagen: begin met zo veel mogelijk dagen, dan zijn er zo min mogelijk trucks. Stopt als het feasible is 
-    for k in reversed(range(1,solution.Instance.Days)):
-        solution.spread_requests(k)
-        if solution.assign_trucks():
-            if solution.assign_technicians():
-                break
-     
+    if TEST_FILE:
+        instance_file = 'instance/STUDENT%03d.txt' % INSTANCE
+        output_file = 'solution/STUDENT%03d-solution.txt' % INSTANCE
+        problem = InstanceVerolog2019(instance_file)
+        problem.calculateDistances() 
+        solution = Solution(problem)
         
+        solution.matches()
         
-    solution.merge_routes()
+        # verdeelt de requests gelijk over een aantal dagen. De loop gaat over het aantal dagen: begin met zo veel mogelijk dagen, dan zijn er zo min mogelijk trucks. Stopt als het feasible is 
+        for k in reversed(range(1,solution.Instance.Days)):
+            solution.spread_requests(k)
+            if solution.assign_trucks():
+                if solution.assign_technicians():
+                    break   
+            
+        solution.merge_routes()
+        
+        solution.combine_routes() # combineert routes: laat een truck meerdere routes doen (tussendoor terug naar depot)
+        
+        #optimize technician distance    
+        
+        for day in range(1,solution.Instance.Days+1):  
+            for technician_route in solution.Days[day-1].TechnicianRoutes:
+                IDs = technician_route.RequestIDs
+                
+                technician = solution.getTechnician(technician_route.TechnicianID)
+                optimized = solution.optimize_route(IDs,technician.locationID) 
+                technician_route.RequestIDs = []
+                for request in optimized[0]:
+                    technician_route.RequestIDs.append(request.ID)    
+                
+        solution.calculate()
+        solution.writeSolution(output_file)
     
-    solution.combine_routes() # combineert routes: laat een truck meerdere routes doen (tussendoor terug naar depot)
 
-    
-    
-    ''' Faalt nog: maakt gebruik via optimize_route van distances for tsp, maar de thuislocatie is niet depot; distances tsp aanpassen 
-    #optimize technician distance    
-    for day in range(1,solution.Instance.Days+1):  
-        for technician_route in solution.Days[day-1].TechnicianRoutes:
-            IDs = technician_route.RequestIDs
-            optimized = solution.optimize_route(IDs) 
-            technician_route.RequestIDs = []
-            for request in optimized[0]:
-                technician_route.RequestIDs.append(request.ID)    '''
-
-        
-      
-    solution.calculate()
-    solution.writeSolution(output_file)
-    
-    
+    else :
+        for instance in range(1, 26):
+            instance_file = 'instance/VSC2019_ORTEC_early_%02d.txt' % instance
+            output_file = 'solution/VSC2019_ORTEC_early_%02d-solution.txt' % instance
+            
+            problem = InstanceVerolog2019(instance_file)
+            problem.calculateDistances() 
+            solution = Solution(problem)
+            
+            solution.matches()
+            
+            # verdeelt de requests gelijk over een aantal dagen. De loop gaat over het aantal dagen: begin met zo veel mogelijk dagen, dan zijn er zo min mogelijk trucks. Stopt als het feasible is 
+            for k in reversed(range(1,solution.Instance.Days)):
+                solution.spread_requests(k)
+                if solution.assign_trucks():
+                    if solution.assign_technicians():
+                        break   
+                
+            solution.merge_routes()
+            
+            solution.combine_routes() # combineert routes: laat een truck meerdere routes doen (tussendoor terug naar depot)
+            
+            #optimize technician distance    
+            
+            for day in range(1,solution.Instance.Days+1):  
+                for technician_route in solution.Days[day-1].TechnicianRoutes:
+                    IDs = technician_route.RequestIDs
+                    
+                    technician = solution.getTechnician(technician_route.TechnicianID)
+                    optimized = solution.optimize_route(IDs,technician.locationID) 
+                    technician_route.RequestIDs = []
+                    for request in optimized[0]:
+                        technician_route.RequestIDs.append(request.ID)    
+                    
+            solution.calculate()
+            solution.writeSolution(output_file)
     end = time.time()
-    
     print(end-start)
 main()
